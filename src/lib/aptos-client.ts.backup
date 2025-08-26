@@ -1,0 +1,684 @@
+import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import NodeCache from 'node-cache';
+import Redis from 'redis';
+
+// ============================================================================
+// TYPES AND INTERFACES
+// ============================================================================
+
+export interface AptosConfig {
+  baseUrl: string;
+  apiKey?: string;
+  timeout: number;
+  maxRetries: number;
+  rateLimitPerSecond: number;
+  cacheTTL: number;
+  enableRedis: boolean;
+  redisUrl?: string;
+}
+
+export interface RateLimitInfo {
+  remaining: number;
+  reset: number;
+  limit: number;
+}
+
+export interface PaginationParams {
+  limit?: number;
+  start?: string;
+  offset?: number;
+}
+
+export interface EventFilter {
+  address: string;
+  tokenType: string;
+  limit?: number;
+  start?: string;
+}
+
+export interface TransactionInfo {
+  version: string;
+  hash: string;
+  timestamp: string;
+  sender: string;
+  receiver?: string;
+  amount?: string;
+  tokenType?: string;
+  tokenSymbol?: string;
+  status: 'success' | 'failure';
+  gasUsed: string;
+  gasPrice: string;
+  sequenceNumber: string;
+  expirationTime: string;
+  function: string;
+  events: Event[];
+}
+
+export interface Event {
+  type: string;
+  data: Record<string, unknown>;
+  sequenceNumber: string;
+  guid: {
+    creationNumber: string;
+    accountAddress: string;
+  };
+}
+
+export interface AccountInfo {
+  address: string;
+  sequenceNumber: string;
+  authenticationKey: string;
+  coinResources: CoinResource[];
+  tokenResources: TokenResource[];
+}
+
+export interface CoinResource {
+  type: string;
+  amount: string;
+  coinType: string;
+}
+
+export interface TokenResource {
+  type: string;
+  amount: string;
+  tokenId: string;
+  tokenProperties: Record<string, unknown>;
+}
+
+export interface DepositEvent {
+  type: string;
+  data: {
+    amount: string;
+    tokenType: string;
+    sender: string;
+    recipient: string;
+  };
+  sequenceNumber: string;
+  timestamp: string;
+}
+
+export interface WithdrawEvent {
+  type: string;
+  data: {
+    amount: string;
+    tokenType: string;
+    sender: string;
+    recipient: string;
+  };
+  sequenceNumber: string;
+  timestamp: string;
+}
+
+// ============================================================================
+// CUSTOM ERROR CLASSES
+// ============================================================================
+
+export class AptosApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public endpoint: string,
+    public originalError?: Error
+  ) {
+    super(message);
+    this.name = 'AptosApiError';
+  }
+}
+
+export class RateLimitError extends AptosApiError {
+  constructor(
+    message: string,
+    statusCode: number,
+    endpoint: string,
+    public resetTime: Date,
+    public originalError?: Error
+  ) {
+    super(message, statusCode, endpoint, originalError);
+    this.name = 'RateLimitError';
+  }
+}
+
+export class CircuitBreakerError extends Error {
+  constructor(
+    message: string,
+    public failureCount: number,
+    public lastFailureTime: Date
+  ) {
+    super(message);
+    this.name = 'CircuitBreakerError';
+  }
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+function calculateJitter(baseDelay: number): number {
+  return baseDelay + Math.random() * baseDelay * 0.1;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function convertMicroUnits(amount: string, decimals: number): string {
+  const num = BigInt(amount);
+  const divisor = BigInt(10 ** decimals);
+  const whole = num / divisor;
+  const fraction = num % divisor;
+  
+  if (fraction === 0n) {
+    return whole.toString();
+  }
+  
+  const fractionStr = fraction.toString().padStart(decimals, '0');
+  return `${whole}.${fractionStr}`;
+}
+
+function getTokenDecimals(tokenType: string): number {
+  // Common token decimals mapping
+  const decimalsMap: Record<string, number> = {
+    '0x1::aptos_coin::AptosCoin': 8,
+    '0x1::coin::Coin<0x1::aptos_coin::AptosCoin>': 8,
+    '0x1::coin::Coin<0x1::usd_coin::USDCoin>': 6,
+    '0x1::coin::Coin<0x1::tether::Tether>': 6,
+    '0x1::coin::Coin<0x1::usdt::USDT>': 6,
+    '0x1::coin::Coin<0x1::usdc::USDC>': 6,
+  };
+  
+  return decimalsMap[tokenType] || 8; // Default to 8 decimals
+}
+
+// ============================================================================
+// MAIN APTOS CLIENT CLASS
+// ============================================================================
+
+export class ResilientAptosClient {
+  private axiosInstance: AxiosInstance;
+  private cache: NodeCache;
+  private redisClient?: Redis.RedisClientType;
+  private requestQueue: Array<() => Promise<unknown>> = [];
+  private isProcessingQueue = false;
+  private failureCount = 0;
+  private lastFailureTime = 0;
+  private circuitBreakerOpen = false;
+  private circuitBreakerThreshold = 5;
+  private circuitBreakerTimeout = 60000; // 1 minute
+
+  constructor(private config: AptosConfig) {
+    this.axiosInstance = axios.create({
+      baseURL: config.baseUrl,
+      timeout: config.timeout,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(config.apiKey && { 'Authorization': `Bearer ${config.apiKey}` }),
+      },
+    });
+
+    // Initialize cache
+    this.cache = new NodeCache({
+      stdTTL: config.cacheTTL,
+      checkperiod: 60,
+    });
+
+    // Initialize Redis if enabled
+    if (config.enableRedis && config.redisUrl) {
+      this.initializeRedis();
+    }
+
+    // Setup request/response interceptors
+    this.setupInterceptors();
+  }
+
+  private async initializeRedis(): Promise<void> {
+    try {
+      this.redisClient = Redis.createClient({
+        url: this.config.redisUrl,
+      });
+      
+      await this.redisClient.connect();
+      console.log('Redis client connected successfully');
+    } catch (error) {
+      console.warn('Failed to connect to Redis, falling back to in-memory cache:', error);
+      this.redisClient = undefined;
+    }
+  }
+
+  private setupInterceptors(): void {
+    // Request interceptor for rate limiting
+    this.axiosInstance.interceptors.request.use(
+      async (config) => {
+        await this.waitForRateLimit();
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
+
+    // Response interceptor for error handling
+    this.axiosInstance.interceptors.response.use(
+      (response) => {
+        this.onSuccess();
+        return response;
+      },
+      async (error: AxiosError) => {
+        await this.onError(error);
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  private async waitForRateLimit(): Promise<void> {
+    const now = Date.now();
+    const key = `rate_limit:${Math.floor(now / 1000)}`;
+    
+    const currentCount = await this.getCacheValue(key) || 0;
+    
+    if (currentCount >= this.config.rateLimitPerSecond) {
+      const waitTime = 1000 - (now % 1000);
+      await sleep(waitTime);
+    }
+    
+    await this.setCacheValue(key, currentCount + 1, 1);
+  }
+
+  private onSuccess(): void {
+    this.failureCount = 0;
+    this.circuitBreakerOpen = false;
+  }
+
+  private async onError(error: AxiosError): Promise<void> {
+    this.failureCount++;
+    this.lastFailureTime = Date.now();
+
+    if (this.failureCount >= this.circuitBreakerThreshold) {
+      this.circuitBreakerOpen = true;
+      setTimeout(() => {
+        this.circuitBreakerOpen = false;
+        this.failureCount = 0;
+      }, this.circuitBreakerTimeout);
+    }
+
+    // Log error details
+    console.error('Aptos API Error:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      method: error.config?.method,
+      data: error.response?.data,
+    });
+  }
+
+  private async getCacheValue(key: string): Promise<unknown> {
+    if (this.redisClient) {
+      try {
+        const value = await this.redisClient.get(key);
+        return value ? JSON.parse(value) : null;
+      } catch (error) {
+        console.warn('Redis get failed, falling back to in-memory cache:', error);
+        return this.cache.get(key);
+      }
+    }
+    return this.cache.get(key);
+  }
+
+  private async setCacheValue(key: string, value: unknown, ttl?: number): Promise<void> {
+    if (this.redisClient) {
+      try {
+        await this.redisClient.setEx(key, ttl || this.config.cacheTTL, JSON.stringify(value));
+      } catch (error) {
+        console.warn('Redis set failed, falling back to in-memory cache:', error);
+        this.cache.set(key, value, ttl);
+      }
+    } else {
+      this.cache.set(key, value, ttl);
+    }
+  }
+
+  private async makeRequest<T>(
+    method: string,
+    endpoint: string,
+    params?: unknown,
+    retries = 0
+  ): Promise<T> {
+    if (this.circuitBreakerOpen) {
+      throw new CircuitBreakerError(
+        'Circuit breaker is open due to repeated failures',
+        this.failureCount,
+        new Date(this.lastFailureTime)
+      );
+    }
+
+    try {
+      const cacheKey = `${method}:${endpoint}:${JSON.stringify(params)}`;
+      const cachedResponse = await this.getCacheValue(cacheKey);
+      
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      const response: AxiosResponse<T> = await this.axiosInstance.request({
+        method,
+        url: endpoint,
+        params,
+      });
+
+      // Cache successful responses
+      await this.setCacheValue(cacheKey, response.data);
+      
+      return response.data;
+    } catch (error) {
+      if (error instanceof CircuitBreakerError) {
+        throw error;
+      }
+
+      if (retries < this.config.maxRetries) {
+        const delay = calculateJitter(Math.pow(2, retries) * 1000);
+        await sleep(delay);
+        return this.makeRequest<T>(method, endpoint, params, retries + 1);
+      }
+
+      if (axios.isAxiosError(error)) {
+        const statusCode = error.response?.status || 500;
+        const message = error.response?.data?.message || error.message;
+        
+        if (statusCode === 429) {
+          const resetTime = new Date(Date.now() + 60000); // Default 1 minute
+          throw new RateLimitError(message, statusCode, endpoint, resetTime, error);
+        }
+        
+        throw new AptosApiError(message, statusCode, endpoint, error);
+      }
+
+      throw new AptosApiError(
+        'Unknown error occurred',
+        500,
+        endpoint,
+        error as Error
+      );
+    }
+  }
+
+  // ============================================================================
+  // CORE API METHODS
+  // ============================================================================
+
+  async getDepositEvents(
+    address: string,
+    tokenType: string,
+    limit: number = 100,
+    start?: string
+  ): Promise<DepositEvent[]> {
+    const params: PaginationParams = { limit, start };
+    
+    try {
+      const response = await this.makeRequest<AptosEventResponse>(
+        'GET',
+        `/accounts/${address}/(event)s`,
+        params
+      );
+
+      // Filter for deposit (event)s and convert micro units
+      const depositEvents = response.data
+        .filter((event) => 
+          event.type.includes('DepositEvent') && 
+          event.data.token_type === tokenType
+        )
+        .map((event) => ({
+          type: event.type,
+          data: {
+            amount: convertMicroUnits(
+              event.data.amount,
+              getTokenDecimals(tokenType)
+            ),
+            tokenType: event.data.token_type,
+            sender: event.data.sender,
+            recipient: event.data.recipient,
+          },
+          sequenceNumber: event.sequence_number,
+          timestamp: event.timestamp,
+        }));
+
+      return depositEvents;
+    } catch (error) {
+      throw new AptosApiError(
+        `Failed to fetch deposit (event)s for ${address}`,
+        500,
+        `/accounts/${address}/(event)s`,
+        error as Error
+      );
+    }
+  }
+
+  async getWithdrawEvents(
+    address: string,
+    tokenType: string,
+    limit: number = 100,
+    start?: string
+  ): Promise<WithdrawEvent[]> {
+    const params: PaginationParams = { limit, start };
+    
+    try {
+      const response = await this.makeRequest<AptosEventResponse>(
+        'GET',
+        `/accounts/${address}/(event)s`,
+        params
+      );
+
+      // Filter for withdraw (event)s and convert micro units
+      const withdrawEvents = response.data
+        .filter((event) => 
+          event.type.includes('WithdrawEvent') && 
+          event.data.token_type === tokenType
+        )
+        .map((event) => ({
+          type: event.type,
+          data: {
+            amount: convertMicroUnits(
+              event.data.amount,
+              getTokenDecimals(tokenType)
+            ),
+            tokenType: event.data.token_type,
+            sender: event.data.sender,
+            recipient: event.data.recipient,
+          },
+          sequenceNumber: event.sequence_number,
+          timestamp: event.timestamp,
+        }));
+
+      return withdrawEvents;
+    } catch (error) {
+      throw new AptosApiError(
+        `Failed to fetch withdraw (event)s for ${address}`,
+        500,
+        `/accounts/${address}/(event)s`,
+        error as Error
+      );
+    }
+  }
+
+  async getTransactionCount(
+    address: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<number> {
+    try {
+      const startVersion = Math.floor(startDate.getTime() / 1000);
+      const endVersion = Math.floor(endDate.getTime() / 1000);
+      
+      const response = await this.makeRequest<AptosEventResponse>(
+        'GET',
+        `/accounts/${address}/transactions`,
+        {
+          start: startVersion,
+          limit: 1000, // Max limit to get all transactions
+        }
+      );
+
+      // Count transactions within date range
+      const transactions = response.data.filter((tx) => {
+        const txTimestamp = parseInt(tx.timestamp);
+        return txTimestamp >= startVersion && txTimestamp <= endVersion;
+      });
+
+      return transactions.length;
+    } catch (error) {
+      throw new AptosApiError(
+        `Failed to get transaction count for ${address}`,
+        500,
+        `/accounts/${address}/transactions`,
+        error as Error
+      );
+    }
+  }
+
+  async getTransactionByVersion(version: string): Promise<TransactionInfo> {
+    try {
+      const response = await this.makeRequest<AptosEventResponse>(
+        'GET',
+        `/transactions/by_version/${version}`
+      );
+
+      const tx = response;
+      
+      return {
+        version: tx.version,
+        hash: tx.hash,
+        timestamp: tx.timestamp,
+        sender: tx.sender,
+        receiver: tx.payload?.arguments?.[0] || undefined,
+        amount: tx.payload?.arguments?.[1] || undefined,
+        tokenType: tx.payload?.type_arguments?.[0] || undefined,
+        tokenSymbol: this.extractTokenSymbol(tx.payload?.type_arguments?.[0]),
+        status: tx.success ? 'success' : 'failure',
+        gasUsed: tx.gas_used,
+        gasPrice: tx.gas_unit_price,
+        sequenceNumber: tx.sequence_number,
+        expirationTime: tx.expiration_timestamp_secs,
+        function: tx.payload?.function || '',
+        events: tx.events || [],
+      };
+    } catch (error) {
+      throw new AptosApiError(
+        `Failed to get transaction ${version}`,
+        500,
+        `/transactions/by_version/${version}`,
+        error as Error
+      );
+    }
+  }
+
+  async getAccountInfo(address: string): Promise<AccountInfo> {
+    try {
+      const response = await this.makeRequest<AptosEventResponse>(
+        'GET',
+        `/accounts/${address}`
+      );
+
+      return {
+        address: response.address,
+        sequenceNumber: response.sequence_number,
+        authenticationKey: response.authentication_key,
+        coinResources: response.coin_resources || [],
+        tokenResources: response.token_resources || [],
+      };
+    } catch (error) {
+      throw new AptosApiError(
+        `Failed to get account info for ${address}`,
+        500,
+        `/accounts/${address}`,
+        error as Error
+      );
+    }
+  }
+
+  // ============================================================================
+  // BATCH OPERATIONS
+  // ============================================================================
+
+  async batchGetTransactions(versions: string[]): Promise<TransactionInfo[]> {
+    const batchSize = 10; // Aptos API batch limit
+    const results: TransactionInfo[] = [];
+
+    for (let i = 0; i < versions.length; i += batchSize) {
+      const batch = versions.slice(i, i + batchSize);
+      const batchPromises = batch.map(version => 
+        this.getTransactionByVersion(version).catch(error => {
+          console.warn(`Failed to fetch transaction ${version}:`, error);
+          return null;
+        })
+      );
+
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults.filter(Boolean) as TransactionInfo[]);
+
+      // Rate limiting between batches
+      if (i + batchSize < versions.length) {
+        await sleep(100);
+      }
+    }
+
+    return results;
+  }
+
+  // ============================================================================
+  // UTILITY METHODS
+  // ============================================================================
+
+  private extractTokenSymbol(tokenType: string): string {
+    if (!tokenType) return '';
+    
+    // Extract symbol from token type string
+    const match = tokenType.match(/::([^:]+)::/);
+    return match ? match[1] : '';
+  }
+
+  async getHealthStatus(): Promise<{
+    status: 'healthy' | 'degraded' | 'unhealthy';
+    circuitBreaker: 'open' | 'closed';
+    failureCount: number;
+    cacheStatus: 'redis' | 'memory' | 'none';
+  }> {
+    return {
+      status: this.circuitBreakerOpen ? 'unhealthy' : 
+              this.failureCount > 0 ? 'degraded' : 'healthy',
+      circuitBreaker: this.circuitBreakerOpen ? 'open' : 'closed',
+      failureCount: this.failureCount,
+      cacheStatus: this.redisClient ? 'redis' : 'memory',
+    };
+  }
+
+  async clearCache(): Promise<void> {
+    this.cache.flushAll();
+    if (this.redisClient) {
+      await this.redisClient.flushAll();
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.redisClient) {
+      await this.redisClient.disconnect();
+    }
+  }
+}
+
+// ============================================================================
+// DEFAULT CONFIGURATION
+// ============================================================================
+
+export const defaultAptosConfig: AptosConfig = {
+  baseUrl: 'https://fullnode.mainnet.aptoslabs.com/v1',
+  timeout: 30000,
+  maxRetries: 3,
+  rateLimitPerSecond: 10,
+  cacheTTL: 300, // 5 minutes
+  enableRedis: false,
+};
+
+// ============================================================================
+// FACTORY FUNCTION
+// ============================================================================
+
+export function createAptosClient(config: Partial<AptosConfig> = {}): ResilientAptosClient {
+  const finalConfig = { ...defaultAptosConfig, ...config };
+  return new ResilientAptosClient(finalConfig);
+}
