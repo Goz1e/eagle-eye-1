@@ -33,7 +33,7 @@ const DEMO_DATA = {
 
 export default function DemoPage() {
   const [activeDemo, setActiveDemo] = useState<string | null>(null);
-  const [demoResults, setDemoResults] = useState<any>(null);
+  const [demoResults, setDemoResults] = useState<unknown>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Demo scenario handlers
@@ -281,7 +281,7 @@ export default function DemoPage() {
 }
 
 // Results Showcase Component
-function ResultsShowcase({ results }: { results: any }) {
+function ResultsShowcase({ results }: { results: unknown }) {
   const renderMetrics = () => {
     switch (results.type) {
       case 'high-volume':
