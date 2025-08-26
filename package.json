@@ -3,17 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "build": "prisma generate && next build",
+    "postinstall": "prisma generate",
+    "dev": "next dev",
     "start": "next start",
-    "lint": "eslint",
-    "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx scripts/seed.ts",
-    "db:setup": "tsx scripts/setup-database.ts",
-    "db:reset": "prisma migrate reset --force && pnpm prisma:seed"
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma db push --force-reset"
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "^4.0.0",

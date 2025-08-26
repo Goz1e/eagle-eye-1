@@ -3,247 +3,57 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "./generated/client"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// ============================================================================
-// USER MANAGEMENT
-// ============================================================================
-
-/// User model for authentication and user management
+// Basic models for Eagle Eye
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  name              String?
-  emailVerified     DateTime?
-  image             String?
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(VIEWER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
-  // Authentication fields
-  hashedPassword    String?
-  salt              String?
-  
-  // Account status
-  isActive          Boolean  @default(true)
-  isVerified        Boolean  @default(false)
-  role              UserRole @default(USER)
-  
-  // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  deletedAt         DateTime? // Soft delete
-  
-  // Relations
-  wallets           Wallet[]
-  reports           Report[]
-  apiCalls          ApiCall[]
-  
-  // Indexes
-  @@index([email])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@index([createdAt])
+  reports   Report[]
+  searches  SavedSearch[]
 }
 
-enum UserRole {
-  USER
+model Report {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  walletData  Json     // Store the WalletActivity results
+  parameters  Json     // Store search parameters
+  status      ReportStatus @default(COMPLETED)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user User @relation(fields: [createdBy], references: [id])
+}
+
+model SavedSearch {
+  id          String   @id @default(cuid())
+  name        String
+  parameters  Json     // Store search parameters
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum Role {
   ADMIN
   ANALYST
-}
-
-// ============================================================================
-// WALLET TRACKING
-// ============================================================================
-
-/// Wallet model for tracking blockchain addresses
-model Wallet {
-  id                String   @id @default(cuid())
-  address           String   @unique // Aptos wallet address
-  label             String?  // User-defined label
-  description       String?
-  
-  // Wallet metadata
-  isActive          Boolean  @default(true)
-  isVerified        Boolean  @default(false)
-  walletType        WalletType @default(REGULAR)
-  
-  // Blockchain data
-  lastTransactionAt DateTime?
-  lastBalanceCheck  DateTime?
-  totalTransactions Int      @default(0)
-  
-  // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  deletedAt         DateTime? // Soft delete
-  
-  // Relations
-  userId            String?
-  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  transactions      Transaction[]
-  reports          Report[]
-  
-  // Indexes
-  @@index([address])
-  @@index([userId])
-  @@index([isActive])
-  @@index([deletedAt])
-  @@index([lastTransactionAt])
-  @@index([createdAt])
-}
-
-enum WalletType {
-  REGULAR
-  CONTRACT
-  MULTISIG
-  EXCHANGE
-  DEFI_PROTOCOL
-}
-
-// ============================================================================
-// TRANSACTION TRACKING
-// ============================================================================
-
-/// Transaction model for blockchain transaction data
-model Transaction {
-  id                String   @id @default(cuid())
-  
-  // Blockchain identifiers
-  version           String   @unique // Aptos transaction version
-  hash              String   @unique // Transaction hash
-  blockHeight       String?
-  
-  // Transaction details
-  sender            String   // Sender wallet address
-  receiver          String?  // Receiver wallet address (if applicable)
-  sequenceNumber    String?
-  
-  // Gas and fees
-  maxGasAmount      String?
-  gasUnitPrice      String?
-  gasUsed           String?
-  fees              String?
-  
-  // Transaction status and type
-  status            TransactionStatus @default(PENDING)
-  type              TransactionType?
-  function          String?  // Function called (e.g., 0x1::coin::transfer)
-  
-  // Amount and token information
-  amount            String?
-  tokenType         String?  // Full token type identifier
-  tokenSymbol       String?
-  
-  // Timestamps
-  timestamp         DateTime
-  expirationTime    DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  deletedAt         DateTime? // Soft delete
-  
-  // Relations
-  walletId          String?
-  wallet            Wallet?  @relation(fields: [walletId], references: [id], onDelete: SetNull)
-  
-  // Indexes
-  @@index([version])
-  @@index([hash])
-  @@index([sender])
-  @@index([receiver])
-  @@index([walletId])
-  @@index([status])
-  @@index([timestamp])
-  @@index([tokenType])
-  @@index([deletedAt])
-  @@index([createdAt])
-  @@index([blockHeight])
-}
-
-enum TransactionStatus {
-  PENDING
-  SUCCESS
-  FAILURE
-  EXPIRED
-}
-
-enum TransactionType {
-  TRANSFER
-  SWAP
-  STAKE
-  UNSTAKE
-  DEPOSIT
-  WITHDRAW
-  MINT
-  BURN
-  OTHER
-}
-
-// ============================================================================
-// REPORT MANAGEMENT
-// ============================================================================
-
-/// Report model for saved wallet analysis reports
-model Report {
-  id                String   @id @default(cuid())
-  
-  // Report identification
-  reportId          String   @unique // External report identifier
-  title             String
-  description       String?
-  
-  // Report configuration
-  walletAddress     String   // Wallet address analyzed
-  timeRangeStart    DateTime
-  timeRangeEnd      DateTime
-  granularity       TimeGranularity @default(DAY)
-  
-  // Analysis options
-  includeTransactions Boolean @default(true)
-  includeBalances    Boolean @default(true)
-  includeDefiInteractions Boolean @default(false)
-  includeNFTs        Boolean @default(false)
-  
-  // Report status and format
-  status            ReportStatus @default(PENDING)
-  format            ReportFormat @default(JSON)
-  priority          ReportPriority @default(NORMAL)
-  
-  // Report data
-  data              Json?    // Actual report data
-  metadata          Json?    // Additional metadata
-  filePath          String?  // Path to generated file
-  
-  // Performance metrics
-  generationTime    Int?     // Time taken to generate in seconds
-  dataQualityScore  Int?     // Data quality score (0-100)
-  
-  // Timestamps
-  requestedAt       DateTime @default(now())
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  deletedAt         DateTime? // Soft delete
-  
-  // Relations
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  walletId          String?
-  wallet            Wallet?  @relation(fields: [walletId], references: [id], onDelete: SetNull)
-  
-  // Indexes
-  @@index([reportId])
-  @@index([userId])
-  @@index([walletId])
-  @@index([walletAddress])
-  @@index([status])
-  @@index([priority])
-  @@index([requestedAt])
-  @@index([deletedAt])
-  @@index([createdAt])
+  VIEWER
 }
 
 enum ReportStatus {
@@ -251,137 +61,4 @@ enum ReportStatus {
   PROCESSING
   COMPLETED
   FAILED
-  CANCELLED
-}
-
-enum ReportFormat {
-  JSON
-  CSV
-  PDF
-  EXCEL
-}
-
-enum ReportPriority {
-  LOW
-  NORMAL
-  HIGH
-  URGENT
-}
-
-enum TimeGranularity {
-  HOUR
-  DAY
-  WEEK
-  MONTH
-  QUARTER
-  YEAR
-}
-
-// ============================================================================
-// TOKEN PRICE CACHING
-// ============================================================================
-
-/// Token price model for caching price data
-model TokenPrice {
-  id                String   @id @default(cuid())
-  
-  // Token identification
-  tokenType         String   // Full token type identifier
-  tokenSymbol       String   // Token symbol (e.g., APT, USDT)
-  
-  // Price data
-  priceUSD          Decimal  @db.Decimal(20, 8)
-  priceChange24h    Decimal? @db.Decimal(10, 4) // Percentage change
-  volume24h         Decimal? @db.Decimal(20, 2)
-  marketCap         Decimal? @db.Decimal(20, 2)
-  
-  // Data source
-  source            String   @default("defillama") // Price data source
-  confidence        Int      @default(100) // Confidence score (0-100)
-  
-  // Timestamps
-  timestamp         DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Indexes
-  @@index([tokenType])
-  @@index([tokenSymbol])
-  @@index([timestamp])
-  @@index([createdAt])
-  @@unique([tokenType, timestamp]) // Prevent duplicate entries for same token at same time
-}
-
-// ============================================================================
-// API CALL MONITORING
-// ============================================================================
-
-/// API call model for rate limiting and monitoring
-model ApiCall {
-  id                String   @id @default(cuid())
-  
-  // API call details
-  endpoint          String   // API endpoint called
-  method            String   @default("GET") // HTTP method
-  statusCode        Int      // HTTP status code
-  
-  // Performance metrics
-  responseTime      Int      // Response time in milliseconds
-  requestSize       Int?     // Request size in bytes
-  responseSize      Int?     // Response size in bytes
-  
-  // Rate limiting
-  rateLimitRemaining Int?    // Remaining rate limit
-  rateLimitReset    DateTime? // Rate limit reset time
-  
-  // Error tracking
-  errorMessage      String?
-  errorCode         String?
-  
-  // User context
-  ipAddress         String?
-  userAgent         String?
-  
-  // Timestamps
-  timestamp         DateTime @default(now())
-  createdAt         DateTime @default(now())
-  
-  // Relations
-  userId            String?
-  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
-  // Indexes
-  @@index([endpoint])
-  @@index([method])
-  @@index([statusCode])
-  @@index([userId])
-  @@index([timestamp])
-  @@index([createdAt])
-  @@index([ipAddress])
-}
-
-// ============================================================================
-// DATABASE CONFIGURATION
-// ============================================================================
-
-/// Database configuration and settings
-model DatabaseConfig {
-  id                String   @id @default(cuid())
-  
-  // Configuration keys
-  key               String   @unique
-  value             String
-  description       String?
-  
-  // Metadata
-  isEncrypted       Boolean  @default(false)
-  category          String?  // Configuration category
-  
-  // Timestamps
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  // Indexes
-  @@index([key])
-  @@index([category])
 }
