@@ -455,39 +455,58 @@ export class ResilientAptosClient {
     const params: PaginationParams = { limit, start };
     
     try {
-      const response = await this.makeRequest<AptosEventResponse>(
+      // Use the correct Aptos API endpoint for transactions
+      const response = await this.makeRequest<Array<{ 
+        version: string;
+        timestamp: string;
+        events: Array<{
+          type: string;
+          data: Record<string, unknown>;
+        }>;
+      }>>(
         'GET',
-        `/accounts/${address}/events`,
+        `/accounts/${address}/transactions`,
         params
       );
 
-      // Filter for deposit events and convert micro units
-      const depositEvents = response.data
-        .filter((event) => 
-          event.type.includes('DepositEvent') && 
-          event.data.token_type === tokenType
-        )
-        .map((event) => ({
-          type: event.type,
-          data: {
-            amount: convertMicroUnits(
-              event.data.amount,
-              getTokenDecimals(tokenType)
-            ),
-            tokenType: event.data.token_type,
-            sender: event.data.sender,
-            recipient: event.data.recipient,
-          },
-          sequenceNumber: event.sequence_number,
-          timestamp: event.timestamp,
-        }));
+      // Filter for deposit events from transactions
+      const depositEvents: DepositEvent[] = [];
+      
+      // Handle case where response is an array directly
+      const transactions = Array.isArray(response) ? response : [];
+      
+      for (const tx of transactions) {
+        if (tx.events) {
+          for (const event of tx.events) {
+            if (event.type.includes('DepositEvent') || event.type.includes('CoinDepositEvent')) {
+              const eventData = event.data as any;
+              if (eventData.amount && eventData.token_type === tokenType) {
+                depositEvents.push({
+                  type: event.type,
+                  data: {
+                    amount: convertMicroUnits(
+                      eventData.amount,
+                      getTokenDecimals(tokenType)
+                    ),
+                    tokenType: eventData.token_type || tokenType,
+                    sender: eventData.sender || 'unknown',
+                    recipient: eventData.recipient || address,
+                  },
+                  sequenceNumber: tx.version,
+                  timestamp: tx.timestamp,
+                });
+              }
+            }
+          }
+        }
+      }
 
       return depositEvents;
     } catch (error) {
       throw new AptosApiError(
         `Failed to fetch deposit events for ${address}`,
         500,
-        `/accounts/${address}/events`,
+        `/accounts/${address}/transactions`,
         error as Error
       );
     }
@@ -502,39 +521,58 @@ export class ResilientAptosClient {
     const params: PaginationParams = { limit, start };
     
     try {
-      const response = await this.makeRequest<AptosEventResponse>(
+      // Use the correct Aptos API endpoint for transactions
+      const response = await this.makeRequest<Array<{ 
+        version: string;
+        timestamp: string;
+        events: Array<{
+          type: string;
+          data: Record<string, unknown>;
+        }>;
+      }>>(
         'GET',
-        `/accounts/${address}/events`,
+        `/accounts/${address}/transactions`,
         params
       );
 
-      // Filter for withdraw events and convert micro units
-      const withdrawEvents = response.data
-        .filter((event) => 
-          event.type.includes('WithdrawEvent') && 
-          event.data.token_type === tokenType
-        )
-        .map((event) => ({
-          type: event.type,
-          data: {
-            amount: convertMicroUnits(
-              event.data.amount,
-              getTokenDecimals(tokenType)
-            ),
-            tokenType: event.data.token_type,
-            sender: event.data.sender,
-            recipient: event.data.recipient,
-          },
-          sequenceNumber: event.sequence_number,
-          timestamp: event.timestamp,
-        }));
+      // Filter for withdraw events from transactions
+      const withdrawEvents: WithdrawEvent[] = [];
+      
+      // Handle case where response is an array directly
+      const transactions = Array.isArray(response) ? response : [];
+      
+      for (const tx of transactions) {
+        if (tx.events) {
+          for (const event of tx.events) {
+            if (event.type.includes('WithdrawEvent') || event.type.includes('CoinWithdrawEvent')) {
+              const eventData = event.data as any;
+              if (eventData.amount && eventData.token_type === tokenType) {
+                withdrawEvents.push({
+                  type: event.type,
+                  data: {
+                    amount: convertMicroUnits(
+                      eventData.amount,
+                      getTokenDecimals(tokenType)
+                    ),
+                    tokenType: eventData.token_type || tokenType,
+                    sender: eventData.sender || address,
+                    recipient: eventData.recipient || 'unknown',
+                  },
+                  sequenceNumber: tx.version,
+                  timestamp: tx.timestamp,
+                });
+              }
+            }
+          }
+        }
+      }
 
       return withdrawEvents;
     } catch (error) {
       throw new AptosApiError(
         `Failed to fetch withdraw events for ${address}`,
         500,
-        `/accounts/${address}/events`,
+        `/accounts/${address}/transactions`,
         error as Error
       );
     }
