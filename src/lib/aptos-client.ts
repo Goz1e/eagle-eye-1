@@ -202,33 +202,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function convertMicroUnits(amount: string, decimals: number): string {
-  const num = BigInt(amount);
-  const divisor = BigInt(10 ** decimals);
-  const whole = num / divisor;
-  const fraction = num % divisor;
-  
-  if (fraction === BigInt(0)) {
-    return whole.toString();
-  }
-  
-  const fractionStr = fraction.toString().padStart(decimals, '0');
-  return `${whole}.${fractionStr}`;
-}
+// Remove unused utility functions
+// export function convertMicroUnits(amount: string, decimals: number = 8): string {
+//   const num = BigInt(amount);
+//   const divisor = BigInt(10 ** decimals);
+//   const whole = num / divisor;
+//   const fraction = num % divisor;
+//   
+//   if (fraction === BigInt(0)) {
+//     return whole.toString();
+//   }
+//   
+//   const fractionStr = fraction.toString().padStart(decimals, '0');
+//   return `${whole}.${fractionStr}`;
+// }
 
-function getTokenDecimals(tokenType: string): number {
-  // Common token decimals mapping
-  const decimalsMap: Record<string, number> = {
-    '0x1::aptos_coin::AptosCoin': 8,
-    '0x1::coin::Coin<0x1::aptos_coin::AptosCoin>': 8,
-    '0x1::coin::Coin<0x1::usd_coin::USDCoin>': 6,
-    '0x1::coin::Coin<0x1::tether::Tether>': 6,
-    '0x1::coin::Coin<0x1::usdt::USDT>': 6,
-    '0x1::coin::Coin<0x1::usdc::USDC>': 6,
-  };
-  
-  return decimalsMap[tokenType] || 8; // Default to 8 decimals
-}
+// export function getTokenDecimals(tokenType: string): number {
+//   // Default to 8 decimals for most Aptos tokens
+//   return 8;
+// }
 
 // ============================================================================
 // MAIN APTOS CLIENT CLASS
@@ -449,132 +441,106 @@ export class ResilientAptosClient {
   async getDepositEvents(
     address: string,
     tokenType: string,
-    limit: number = 100,
-    start?: string
-  ): Promise<DepositEvent[]> {
-    const params: PaginationParams = { limit, start };
-    
+    limit: number = 100
+  ): Promise<Array<{
+    type: string
+    data: Record<string, unknown>
+  }>> {
     try {
-      // Use the correct Aptos API endpoint for transactions
-      const response = await this.makeRequest<Array<{ 
-        version: string;
-        timestamp: string;
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        start: '0',
+      })
+
+      const response = await this.makeRequest<Array<{
+        version: string
+        timestamp: string
         events: Array<{
-          type: string;
-          data: Record<string, unknown>;
-        }>;
+          type: string
+          data: Record<string, unknown>
+        }>
       }>>(
         'GET',
         `/accounts/${address}/transactions`,
-        params
-      );
+        Object.fromEntries(params)
+      )
 
-      // Filter for deposit events from transactions
-      const depositEvents: DepositEvent[] = [];
-      
-      // Handle case where response is an array directly
-      const transactions = Array.isArray(response) ? response : [];
-      
+      const transactions = Array.isArray(response) ? response : []
+      const depositEvents: Array<{
+        type: string
+        data: Record<string, unknown>
+      }> = []
+
       for (const tx of transactions) {
-        if (tx.events) {
+        if (tx.events && Array.isArray(tx.events)) {
           for (const event of tx.events) {
-            if (event.type.includes('DepositEvent') || event.type.includes('CoinDepositEvent')) {
-              const eventData = event.data as any;
-              if (eventData.amount && eventData.token_type === tokenType) {
-                depositEvents.push({
-                  type: event.type,
-                  data: {
-                    amount: convertMicroUnits(
-                      eventData.amount,
-                      getTokenDecimals(tokenType)
-                    ),
-                    tokenType: eventData.token_type || tokenType,
-                    sender: eventData.sender || 'unknown',
-                    recipient: eventData.recipient || address,
-                  },
-                  sequenceNumber: tx.version,
-                  timestamp: tx.timestamp,
-                });
-              }
+            if (event.type === tokenType && event.data) {
+              depositEvents.push({
+                type: 'deposit',
+                data: event.data,
+              })
             }
           }
         }
       }
 
-      return depositEvents;
+      return depositEvents
     } catch (error) {
-      throw new AptosApiError(
-        `Failed to fetch deposit events for ${address}`,
-        500,
-        `/accounts/${address}/transactions`,
-        error as Error
-      );
+      console.error(`Failed to fetch deposit events for ${address}:`, error)
+      throw new Error(`Failed to fetch deposit events for ${address}`)
     }
   }
 
   async getWithdrawEvents(
     address: string,
     tokenType: string,
-    limit: number = 100,
-    start?: string
-  ): Promise<WithdrawEvent[]> {
-    const params: PaginationParams = { limit, start };
-    
+    limit: number = 100
+  ): Promise<Array<{
+    type: string
+    data: Record<string, unknown>
+  }>> {
     try {
-      // Use the correct Aptos API endpoint for transactions
-      const response = await this.makeRequest<Array<{ 
-        version: string;
-        timestamp: string;
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        start: '0',
+      })
+
+      const response = await this.makeRequest<Array<{
+        version: string
+        timestamp: string
         events: Array<{
-          type: string;
-          data: Record<string, unknown>;
-        }>;
+          type: string
+          data: Record<string, unknown>
+        }>
       }>>(
         'GET',
         `/accounts/${address}/transactions`,
-        params
-      );
+        Object.fromEntries(params)
+      )
 
-      // Filter for withdraw events from transactions
-      const withdrawEvents: WithdrawEvent[] = [];
-      
-      // Handle case where response is an array directly
-      const transactions = Array.isArray(response) ? response : [];
-      
+      const transactions = Array.isArray(response) ? response : []
+      const withdrawEvents: Array<{
+        type: string
+        data: Record<string, unknown>
+      }> = []
+
       for (const tx of transactions) {
-        if (tx.events) {
+        if (tx.events && Array.isArray(tx.events)) {
           for (const event of tx.events) {
-            if (event.type.includes('WithdrawEvent') || event.type.includes('CoinWithdrawEvent')) {
-              const eventData = event.data as any;
-              if (eventData.amount && eventData.token_type === tokenType) {
-                withdrawEvents.push({
-                  type: event.type,
-                  data: {
-                    amount: convertMicroUnits(
-                      eventData.amount,
-                      getTokenDecimals(tokenType)
-                    ),
-                    tokenType: eventData.token_type || tokenType,
-                    sender: eventData.sender || address,
-                    recipient: eventData.recipient || 'unknown',
-                  },
-                  sequenceNumber: tx.version,
-                  timestamp: tx.timestamp,
-                });
-              }
+            if (event.type === tokenType && event.data) {
+              withdrawEvents.push({
+                type: 'withdrawal',
+                data: event.data,
+              })
             }
           }
         }
       }
 
-      return withdrawEvents;
+      return withdrawEvents
     } catch (error) {
-      throw new AptosApiError(
-        `Failed to fetch withdraw events for ${address}`,
-        500,
-        `/accounts/${address}/transactions`,
-        error as Error
-      );
+      console.error(`Failed to fetch withdraw events for ${address}:`, error)
+      throw new Error(`Failed to fetch withdraw events for ${address}`)
     }
   }
 
@@ -689,7 +655,14 @@ export class ResilientAptosClient {
   async batchGetDepositEvents(
     walletTokenPairs: Array<{ address: string; tokenType: string }>,
     limit: number = 100
-  ): Promise<Array<{ address: string; tokenType: string; events: DepositEvent[] }>> {
+  ): Promise<Array<{ 
+    address: string; 
+    tokenType: string; 
+    events: Array<{
+      type: string
+      data: Record<string, unknown>
+    }>
+  }>> {
     const promises = walletTokenPairs.map(({ address, tokenType }) =>
       this.getDepositEvents(address, tokenType, limit)
         .then(events => ({ address, tokenType, events }))

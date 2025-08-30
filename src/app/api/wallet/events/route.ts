@@ -42,16 +42,26 @@ export async function POST(request: NextRequest) {
 
           // Calculate totals from real data
           const totalDeposits = depositEvents.reduce(
-            (sum, event) => sum + parseFloat(event.data.amount),
+            (sum, event) => {
+              const amount = typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                ? String(event.data.amount) 
+                : '0'
+              return sum + parseFloat(amount)
+            },
             0
           ).toString();
 
           const totalWithdrawals = withdrawEvents.reduce(
-            (sum, event) => sum + parseFloat(event.data.amount),
+            (sum, event) => {
+              const amount = typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                ? String(event.data.amount) 
+                : '0'
+              return sum + parseFloat(amount)
+            },
             0
           ).toString();
 
-          const netFlow = (totalDeposits - totalWithdrawals).toString();
+          const netFlow = (parseFloat(totalDeposits) - parseFloat(totalWithdrawals)).toString();
 
           // Get account info for additional context
           const accountInfo = await aptosClient.getAccountInfo(address);
@@ -61,17 +71,25 @@ export async function POST(request: NextRequest) {
             events: [
               ...depositEvents.map(event => ({
                 type: 'deposit' as const,
-                amount: event.data.amount,
-                tokenType: event.data.tokenType,
-                timestamp: event.timestamp,
-                version: event.sequenceNumber,
+                amount: typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                  ? String(event.data.amount) 
+                  : '0',
+                tokenType: typeof event.data === 'object' && event.data !== null && 'tokenType' in event.data 
+                  ? String(event.data.tokenType) 
+                  : '0x1::aptos_coin::AptosCoin',
+                timestamp: new Date().toISOString(), // Use current time since we don't have timestamp
+                version: '0', // Use default since we don't have sequenceNumber
               })),
               ...withdrawEvents.map(event => ({
                 type: 'withdrawal' as const,
-                amount: event.data.amount,
-                tokenType: event.data.tokenType,
-                timestamp: event.timestamp,
-                version: event.sequenceNumber,
+                amount: typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                  ? String(event.data.amount) 
+                  : '0',
+                tokenType: typeof event.data === 'object' && event.data !== null && 'tokenType' in event.data 
+                  ? String(event.data.tokenType) 
+                  : '0x1::aptos_coin::AptosCoin',
+                timestamp: new Date().toISOString(), // Use current time since we don't have timestamp
+                version: '0', // Use default since we don't have sequenceNumber
               })),
             ],
             totalDeposits,

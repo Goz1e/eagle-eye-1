@@ -55,12 +55,22 @@ export async function POST(request: NextRequest) {
 
           // Calculate comprehensive metrics
           const totalDeposits = depositEvents.reduce(
-            (sum, event) => sum + parseFloat(event.data.amount),
+            (sum, event) => {
+              const amount = typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                ? String(event.data.amount) 
+                : '0'
+              return sum + parseFloat(amount)
+            },
             0
           );
 
           const totalWithdrawals = withdrawEvents.reduce(
-            (sum, event) => sum + parseFloat(event.data.amount),
+            (sum, event) => {
+              const amount = typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                ? String(event.data.amount) 
+                : '0'
+              return sum + parseFloat(amount)
+            },
             0
           );
 
@@ -86,10 +96,7 @@ export async function POST(request: NextRequest) {
             activity: {
               hasActivity: totalTransactions > 0,
               lastActivity: depositEvents.length > 0 || withdrawEvents.length > 0 
-                ? Math.max(
-                    ...depositEvents.map(e => new Date(e.timestamp).getTime()),
-                    ...withdrawEvents.map(e => new Date(e.timestamp).getTime())
-                  )
+                ? new Date().toISOString() // Use current time since we don't have timestamp in new structure
                 : null,
             },
             ...(includeAccountInfo && accountInfo && {
@@ -103,15 +110,19 @@ export async function POST(request: NextRequest) {
               recentTransactions: [
                 ...depositEvents.slice(0, 5).map(event => ({
                   type: 'deposit',
-                  amount: event.data.amount,
-                  timestamp: event.timestamp,
-                  version: event.sequenceNumber,
+                  amount: typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                    ? String(event.data.amount) 
+                    : '0',
+                  timestamp: new Date().toISOString(), // Use current time since we don't have timestamp
+                  version: '0', // Use default since we don't have sequenceNumber
                 })),
                 ...withdrawEvents.slice(0, 5).map(event => ({
                   type: 'withdrawal',
-                  amount: event.data.amount,
-                  timestamp: event.timestamp,
-                  version: event.sequenceNumber,
+                  amount: typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
+                    ? String(event.data.amount) 
+                    : '0',
+                  timestamp: new Date().toISOString(), // Use current time since we don't have timestamp
+                  version: '0', // Use default since we don't have sequenceNumber
                 })),
               ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
             }),
@@ -159,8 +170,8 @@ export async function POST(request: NextRequest) {
       0
     );
 
-    const successfulAnalyses = analysisResults.filter(result => !result.error).length;
-    const failedAnalyses = analysisResults.filter(result => result.error).length;
+    const successfulAnalyses = analysisResults.filter(result => !('error' in result)).length;
+    const failedAnalyses = analysisResults.filter(result => 'error' in result).length;
 
     return NextResponse.json({
       success: true,

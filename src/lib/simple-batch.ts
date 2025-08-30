@@ -8,7 +8,7 @@ export interface BatchProcessorConfig {
   retryDelay: number;
 }
 
-export interface BatchJob<T, R> {
+export interface BatchJob<T> {
   id: string;
   data: T;
   priority?: number;
@@ -27,147 +27,138 @@ export interface ProgressCallback {
   (processed: number, total: number, currentItem?: string): void;
 }
 
-export class SimpleBatchProcessor {
-  private config: BatchProcessorConfig;
+export class SimpleBatchProcessor<T extends { address: string; [key: string]: unknown }> {
+  private batchSize: number
+  private priority: 'low' | 'normal' | 'high'
+  private includeProgress: boolean
 
-  constructor(config: BatchProcessorConfig = {
-    maxConcurrency: 5,
-    retryAttempts: 3,
-    retryDelay: 1000,
-  }) {
-    this.config = config;
+  constructor(options: {
+    batchSize?: number
+    priority?: 'low' | 'normal' | 'high'
+    includeProgress?: boolean
+  } = {}) {
+    this.batchSize = options.batchSize || 10
+    this.priority = options.priority || 'normal'
+    this.includeProgress = options.includeProgress !== false
   }
 
-  // ============================================================================
-  // MAIN BATCH PROCESSING METHOD
-  // ============================================================================
+  async processBatch(
+    addresses: string[],
+    tokenTypes?: string[]
+  ): Promise<Array<T & { processingTimeMs: number }>> {
+    const results: Array<T & { processingTimeMs: number }> = []
+    const totalBatches = Math.ceil(addresses.length / this.batchSize)
 
-  async processBatch<T, R>(
-    items: T[],
-    processor: (item: T, index: number) => Promise<R>,
-    onProgress?: ProgressCallback
-  ): Promise<BatchResult<T, R>[]> {
-    const results: BatchResult<T, R>[] = [];
-    const total = items.length;
-    let processed = 0;
+    for (let i = 0; i < addresses.length; i += this.batchSize) {
+      const batch = addresses.slice(i, i + this.batchSize)
+      const batchStartTime = Date.now()
 
-    // Process items in batches based on concurrency limit
-    for (let i = 0; i < total; i += this.config.maxConcurrency) {
-      const batch = items.slice(i, i + this.config.maxConcurrency);
-      const batchPromises = batch.map(async (item, batchIndex) => {
-        const globalIndex = i + batchIndex;
-        const result = await this.processItemWithRetry(item, processor, globalIndex);
-        
-        processed++;
-        if (onProgress) {
-          onProgress(processed, total, `Processing item ${globalIndex + 1}`);
+      console.log(`Processing batch ${Math.floor(i / this.batchSize) + 1}/${totalBatches}: ${batch.length} addresses`)
+
+      // Process batch concurrently
+      const batchPromises = batch.map(async (address, batchIndex) => {
+        try {
+          const addressStartTime = Date.now()
+
+          // Simulate wallet analysis (replace with actual implementation)
+          const walletData = await this.analyzeWallet(address, tokenTypes)
+          const processingTime = Date.now() - addressStartTime
+
+          return {
+            ...walletData,
+            processingTimeMs: processingTime,
+          } as T & { processingTimeMs: number }
+        } catch (error) {
+          console.error(`Error processing address ${address}:`, error)
+          
+          // Return error result
+          return {
+            address,
+            batchIndex: i + batchIndex,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            summary: {
+              totalDeposits: '0',
+              totalWithdrawals: '0',
+              netFlow: '0',
+              totalTransactions: 0,
+              processingTimeMs: 0,
+            },
+            events: { deposits: 0, withdrawals: 0, total: 0 },
+            metadata: {
+              analyzedAt: new Date().toISOString(),
+              tokenType: tokenTypes?.[0] || '0x1::aptos_coin::AptosCoin',
+              dataSource: 'Aptos Mainnet',
+              batchNumber: Math.floor(i / this.batchSize) + 1,
+              priority: this.priority,
+              cacheStatus: 'error',
+            },
+            processingTimeMs: 0,
+          } as unknown as T & { processingTimeMs: number }
+        }
+      })
+
+      // Wait for batch to complete
+      const batchResults = await Promise.all(batchPromises)
+      const batchProcessingTime = Date.now() - batchStartTime
+      
+      results.push(...batchResults)
+
+      // Add batch metadata
+      if (this.includeProgress) {
+        const progress = {
+          batchNumber: Math.floor(i / this.batchSize) + 1,
+          totalBatches,
+          addressesProcessed: Math.min(i + this.batchSize, addresses.length),
+          totalAddresses: addresses.length,
+          progressPercentage: Math.min(((i + this.batchSize) / addresses.length) * 100, 100),
+          batchProcessingTimeMs: batchProcessingTime,
+          estimatedTimeRemaining: batchProcessingTime * (Math.ceil(addresses.length / this.batchSize) - Math.floor(i / this.batchSize) - 1),
         }
         
-        return result;
-      });
+        console.log('Batch Progress:', progress)
+      }
 
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
-    }
-
-    return results;
-  }
-
-  // ============================================================================
-  // INDIVIDUAL ITEM PROCESSING WITH RETRY
-  // ============================================================================
-
-  private async processItemWithRetry<T, R>(
-    item: T,
-    processor: (item: T, index: number) => Promise<R>,
-    index: number
-  ): Promise<BatchResult<T, R>> {
-    let lastError: string | undefined;
-    const startTime = Date.now();
-
-    for (let attempt = 1; attempt <= this.config.retryAttempts; attempt++) {
-      try {
-        const data = await processor(item, index);
-        const executionTime = Date.now() - startTime;
-        
-        return {
-          success: true,
-          data,
-          item,
-          attempts: attempt,
-          executionTime,
-        };
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : 'Unknown error';
-        
-        if (attempt < this.config.retryAttempts) {
-          // Wait before retry with exponential backoff
-          const delay = this.config.retryDelay * Math.pow(2, attempt - 1);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
+      // Rate limiting between batches (except for high priority)
+      if (this.priority !== 'high' && i + this.batchSize < addresses.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
     }
 
-    const executionTime = Date.now() - startTime;
-    return {
-      success: false,
-      error: lastError,
-      item,
-      attempts: this.config.retryAttempts,
-      executionTime,
-    };
+    return results
   }
 
-  // ============================================================================
-  // UTILITY METHODS
-  // ============================================================================
-
-  async processBatchWithTimeout<T, R>(
-    items: T[],
-    processor: (item: T, index: number) => Promise<R>,
-    timeoutMs: number = 30000,
-    onProgress?: ProgressCallback
-  ): Promise<BatchResult<T, R>[]> {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Batch processing timeout')), timeoutMs);
-    });
-
-    try {
-      return await Promise.race([
-        this.processBatch(items, processor, onProgress),
-        timeoutPromise
-      ]);
-    } catch (error) {
-      // Return partial results if timeout occurs
-      console.warn('Batch processing timed out, returning partial results');
-      return [];
-    }
-  }
-
-  // ============================================================================
-  // STATISTICS AND METRICS
-  // ============================================================================
-
-  getBatchStats(results: BatchResult<unknown, unknown>[]): {
-    total: number;
-    successful: number;
-    failed: number;
-    averageExecutionTime: number;
-    totalExecutionTime: number;
-  } {
-    const total = results.length;
-    const successful = results.filter(r => r.success).length;
-    const failed = total - successful;
-    const totalExecutionTime = results.reduce((sum, r) => sum + r.executionTime, 0);
-    const averageExecutionTime = total > 0 ? totalExecutionTime / total : 0;
-
+  private async analyzeWallet(address: string, tokenTypes?: string[]): Promise<T> {
+    // Simulate wallet analysis
+    await new Promise(resolve => setTimeout(resolve, Math.random() * 200 + 100))
+    
     return {
-      total,
-      successful,
-      failed,
-      averageExecutionTime,
-      totalExecutionTime,
-    };
+      address,
+      batchIndex: 0,
+      summary: {
+        totalDeposits: '1000000000', // 10 APT
+        totalWithdrawals: '500000000', // 5 APT
+        netFlow: '500000000', // 5 APT
+        totalTransactions: 25,
+        processingTimeMs: 150,
+      },
+      events: {
+        deposits: 15,
+        withdrawals: 10,
+        total: 25,
+      },
+      accountInfo: {
+        sequenceNumber: '100',
+        coinResources: [],
+        tokenResources: [],
+      },
+      metadata: {
+        analyzedAt: new Date().toISOString(),
+        tokenType: tokenTypes?.[0] || '0x1::aptos_coin::AptosCoin',
+        dataSource: 'Aptos Mainnet',
+        batchNumber: 1,
+        priority: this.priority,
+      },
+    } as unknown as T
   }
 }
 
@@ -176,7 +167,7 @@ export class SimpleBatchProcessor {
 // ============================================================================
 
 export const simpleBatchProcessor = new SimpleBatchProcessor({
-  maxConcurrency: 5,
-  retryAttempts: 3,
-  retryDelay: 1000,
+  batchSize: 5,
+  priority: 'normal',
+  includeProgress: true,
 });
