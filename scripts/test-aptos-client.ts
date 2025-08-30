@@ -11,9 +11,9 @@ async function testAptosClient() {
   try {
     console.log('✅ Client created successfully');
     
-    // Test health status
-    const health = await client.getHealthStatus();
-    console.log('🏥 Health Status:', health);
+    // Test ledger info (health check alternative)
+    const ledgerInfo = await client.getLedgerInfo();
+    console.log('🏥 Ledger Info:', ledgerInfo);
     
     // Test with a valid Aptos address (this will fail but should show proper error handling)
     const testAddress = '0x1d8727df513fa2a45c1d1cac54c6f1e5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b';
@@ -37,8 +37,8 @@ async function testAptosClient() {
     console.error('❌ Test failed:', error);
     process.exit(1);
   } finally {
-    await client.disconnect();
-    console.log('🔌 Client disconnected');
+    // No disconnect method needed for our client
+    console.log('🔌 Test completed');
   }
 }
 

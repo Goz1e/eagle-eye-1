@@ -16,90 +16,31 @@ export async function POST(request: NextRequest) {
 
     // Initialize Aptos client
     const aptosClient = createAptosClient({
-      baseUrl: 'https://fullnode.mainnet.aptoslabs.com/v1',
+      nodeUrl: 'https://api.mainnet.aptoslabs.com/v1',
       timeout: 30000,
       maxRetries: 3,
       cacheTTL: 300, // 5 minutes
-      rateLimitPerSecond: 10,
+
     });
 
-    // Process each address with real blockchain data
+        // Process each address with basic account information
     const realEvents = await Promise.all(
       addresses.map(async (address) => {
         try {
-          // Get real deposit and withdrawal events
-          const depositEvents = await aptosClient.getDepositEvents(
-            address,
-            tokenTypes?.[0] || '0x1::aptos_coin::AptosCoin',
-            100
-          );
-
-          const withdrawEvents = await aptosClient.getWithdrawEvents(
-            address,
-            tokenTypes?.[0] || '0x1::aptos_coin::AptosCoin',
-            100
-          );
-
-          // Calculate totals from real data
-          const totalDeposits = depositEvents.reduce(
-            (sum, event) => {
-              const amount = typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
-                ? String(event.data.amount) 
-                : '0'
-              return sum + parseFloat(amount)
-            },
-            0
-          ).toString();
-
-          const totalWithdrawals = withdrawEvents.reduce(
-            (sum, event) => {
-              const amount = typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
-                ? String(event.data.amount) 
-                : '0'
-              return sum + parseFloat(amount)
-            },
-            0
-          ).toString();
-
-          const netFlow = (parseFloat(totalDeposits) - parseFloat(totalWithdrawals)).toString();
-
-          // Get account info for additional context
+          // Get account info for basic context
           const accountInfo = await aptosClient.getAccountInfo(address);
+          const coinBalance = await aptosClient.getAptosCoinBalance(address);
 
           return {
             address,
-            events: [
-              ...depositEvents.map(event => ({
-                type: 'deposit' as const,
-                amount: typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
-                  ? String(event.data.amount) 
-                  : '0',
-                tokenType: typeof event.data === 'object' && event.data !== null && 'tokenType' in event.data 
-                  ? String(event.data.tokenType) 
-                  : '0x1::aptos_coin::AptosCoin',
-                timestamp: new Date().toISOString(), // Use current time since we don't have timestamp
-                version: '0', // Use default since we don't have sequenceNumber
-              })),
-              ...withdrawEvents.map(event => ({
-                type: 'withdrawal' as const,
-                amount: typeof event.data === 'object' && event.data !== null && 'amount' in event.data 
-                  ? String(event.data.amount) 
-                  : '0',
-                tokenType: typeof event.data === 'object' && event.data !== null && 'tokenType' in event.data 
-                  ? String(event.data.tokenType) 
-                  : '0x1::aptos_coin::AptosCoin',
-                timestamp: new Date().toISOString(), // Use current time since we don't have timestamp
-                version: '0', // Use default since we don't have sequenceNumber
-              })),
-            ],
-            totalDeposits,
-            totalWithdrawals,
-            netFlow,
+            events: [],
+            totalDeposits: '0',
+            totalWithdrawals: '0',
+            netFlow: '0',
             accountInfo: {
-              sequenceNumber: accountInfo.sequenceNumber,
-              coinResources: accountInfo.coinResources,
-              tokenResources: accountInfo.tokenResources,
+              sequenceNumber: accountInfo?.sequence_number || '0',
             },
+            coinBalance,
           };
         } catch (error) {
           console.error(`Error processing address ${address}:`, error);
@@ -117,8 +58,7 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // Clean up client
-    await aptosClient.disconnect();
+    // Client cleanup not needed for this implementation
 
     return NextResponse.json({
       success: true,

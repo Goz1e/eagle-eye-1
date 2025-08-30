@@ -1,26 +1,200 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* Import Inter font for professional typography */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* CSS Custom Properties for Design System */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Primary Brand Colors */
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-50: #eff6ff;
+  
+  /* Neutral Grays */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  
+  /* Semantic Colors */
+  --success-500: #10b981;
+  --success-50: #ecfdf5;
+  --warning-500: #f59e0b;
+  --warning-50: #fffbeb;
+  --error-500: #ef4444;
+  --error-50: #fef2f2;
+  
+  /* Typography */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  /* Text Sizes */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Base Styles */
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+  
+  body {
+    background-color: var(--slate-50);
+    color: var(--slate-900);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+  }
+  
+  /* Professional focus states */
+  *:focus-visible {
+    outline: 2px solid var(--primary-600);
+    outline-offset: 2px;
+  }
+  
+  /* Typography scale */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--slate-900);
+  }
+  
+  h1 { font-size: var(--text-3xl); }
+  h2 { font-size: var(--text-2xl); }
+  h3 { font-size: var(--text-xl); }
+  h4 { font-size: var(--text-lg); }
+  h5 { font-size: var(--text-base); }
+  h6 { font-size: var(--text-sm); }
+  
+  p {
+    color: var(--slate-600);
+    line-height: 1.6;
+  }
+  
+  code {
+    font-family: var(--font-mono);
+    background-color: var(--slate-100);
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Component Styles */
+@layer components {
+  /* Professional button variants */
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg 
+           transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg 
+           border border-gray-300 transition-colors duration-200 focus:ring-2 
+           focus:ring-blue-500 focus:ring-offset-2;
+  }
+  
+  .btn-ghost {
+    @apply text-gray-500 hover:text-gray-700 font-medium px-4 py-2 rounded-lg 
+           transition-colors duration-200 hover:bg-gray-100;
+  }
+  
+  /* Professional card styles */
+  .card {
+    @apply bg-white border-0 shadow-sm ring-1 ring-slate-200/50 rounded-lg;
+  }
+  
+  .card-header {
+    @apply p-6 pb-4;
+  }
+  
+  .card-content {
+    @apply p-6 pt-0;
+  }
+  
+  /* Professional form styles */
+  .form-input {
+    @apply w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 
+           focus:ring-blue-500/10 transition-colors duration-200;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-slate-700 mb-2;
+  }
+  
+  .form-description {
+    @apply text-sm text-slate-500 mt-1;
+  }
+  
+  /* Professional badge styles */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .badge-primary {
+    @apply bg-blue-100 text-blue-800;
+  }
+  
+  .badge-secondary {
+    @apply bg-slate-100 text-slate-700;
+  }
+  
+  .badge-success {
+    @apply bg-green-100 text-green-800;
+  }
+  
+  .badge-warning {
+    @apply bg-yellow-100 text-yellow-800;
+  }
+  
+  .badge-error {
+    @apply bg-red-100 text-red-800;
+  }
+}
+
+/* Utility Classes */
+@layer utilities {
+  /* Professional spacing */
+  .section-padding {
+    @apply px-4 sm:px-6 lg:px-8 py-8;
+  }
+  
+  .container-max {
+    @apply max-w-7xl mx-auto;
+  }
+  
+  /* Professional shadows */
+  .shadow-subtle {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  }
+  
+  .shadow-elevated {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  .shadow-prominent {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Professional transitions */
+  .transition-smooth {
+    @apply transition-all duration-200 ease-in-out;
+  }
+  
+  .transition-fast {
+    @apply transition-all duration-150 ease-in-out;
+  }
 }
