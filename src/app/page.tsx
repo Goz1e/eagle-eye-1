@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { WalletAddressInput } from '@/components/wallet';
+import { UserProfile } from '@/components/auth/UserProfile';
 
-export default function Home() {
+export default function HomePage() {
   const [analyzedAddresses, setAnalyzedAddresses] = useState<string[]>([]);
 
   const handleAddressesConfirmed = (addresses: string[]) => {
@@ -16,11 +17,13 @@ export default function Home() {
     <div className="min-h-screen bg-slate-50">
       {/* Professional Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="container-max section-padding">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-elevated">
-                <span className="text-2xl text-white">🦅</span>
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-slate-900">Eagle Eye</h1>
@@ -28,20 +31,7 @@ export default function Home() {
               </div>
             </div>
             
-            <div className="flex items-center space-x-3">
-              <Link 
-                href="/analyze"
-                className="btn-secondary text-sm"
-              >
-                Advanced Analysis
-              </Link>
-              <Link 
-                href="/analyze"
-                className="btn-primary text-sm"
-              >
-                Get Started
-              </Link>
-            </div>
+            <UserProfile />
           </div>
         </div>
       </header>

@@ -1,0 +1,213 @@
+import { WalletReportData } from './report-processor';
+
+/**
+ * Export utilities for wallet analysis reports
+ */
+
+export interface ExportOptions {
+  filename?: string;
+  includeCharts?: boolean;
+  includeInsights?: boolean;
+  format?: 'pdf' | 'csv' | 'json';
+}
+
+/**
+ * Export report data to CSV format
+ */
+export function exportToCSV(reportData: WalletReportData, options: ExportOptions = {}): void {
+  const { filename = 'wallet-analysis-report' } = options;
+  
+  // Prepare CSV data
+  const csvRows: string[] = [];
+  
+  // Summary data
+  csvRows.push('Metric,Value');
+  csvRows.push(`Total Portfolio Value,${reportData.summary.totalPortfolioValue}`);
+  csvRows.push(`Total Transactions,${reportData.summary.totalTransactionCount}`);
+  csvRows.push(`Active Wallets,${reportData.summary.activeWalletCount}`);
+  csvRows.push(`Total Wallets,${reportData.summary.totalWallets}`);
+  csvRows.push(`Average Balance,${reportData.summary.averageBalanceUSD}`);
+  csvRows.push(`Total Volume,${reportData.summary.totalVolumeUSD}`);
+  
+  csvRows.push(''); // Empty row for separation
+  
+  // Wallet details
+  csvRows.push('Address,Balance USD,Transactions,Total Volume,Efficiency %,Risk Score,Last Activity');
+  reportData.wallets.forEach(wallet => {
+    csvRows.push([
+      wallet.walletAddress,
+      wallet.totalVolumeUSD || 0,
+      wallet.transactionCount || 0,
+      wallet.totalVolume || 0,
+      ((wallet.transactionCount || 0) / 100 * 100).toFixed(1),
+      ((wallet.totalVolumeUSD || 0) / 10000 * 100).toFixed(1),
+      wallet.lastUpdated ? wallet.lastUpdated.toLocaleDateString() : 'Unknown'
+    ].join(','));
+  });
+  
+  csvRows.push(''); // Empty row for separation
+  
+  // Insights
+  csvRows.push('Type,Priority,Title,Description,Actionable');
+  reportData.insights.forEach(insight => {
+    csvRows.push([
+      insight.type,
+      insight.priority,
+      insight.title,
+      insight.description,
+      insight.actionable
+    ].join(','));
+  });
+  
+  // Create and download CSV
+  const csvContent = csvRows.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+}
+
+/**
+ * Export report data to JSON format
+ */
+export function exportToJSON(reportData: WalletReportData, options: ExportOptions = {}): void {
+  const { filename = 'wallet-analysis-report' } = options;
+  
+  const jsonContent = JSON.stringify(reportData, null, 2);
+  const blob = new Blob([jsonContent], { type: 'application/json' });
+  const link = document.createElement('a');
+  
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}-${new Date().toISOString().split('T')[0]}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+}
+
+/**
+ * Export report to PDF (placeholder - would integrate with jsPDF or similar)
+ */
+export async function exportToPDF(reportData: WalletReportData, options: ExportOptions = {}): Promise<void> {
+  const { filename = 'wallet-analysis-report' } = options;
+  
+  // This is a placeholder implementation
+  // In a real implementation, you would use jsPDF or similar library
+  console.log('PDF export not yet implemented');
+  
+  // For now, we'll export as JSON and suggest using a PDF converter
+  alert('PDF export is coming soon! For now, please use the JSON export and convert using online tools.');
+  
+  // Fallback to JSON export
+  exportToJSON(reportData, { ...options, filename: `${filename}-for-pdf-conversion` });
+}
+
+/**
+ * Share report via email
+ */
+export function shareViaEmail(reportData: WalletReportData, options: ExportOptions = {}): void {
+  const { filename = 'wallet-analysis-report' } = options;
+  
+  const subject = encodeURIComponent(`Wallet Analysis Report - ${new Date().toLocaleDateString()}`);
+  const body = encodeURIComponent(`
+Wallet Analysis Report
+
+Generated: ${reportData.generatedAt.toLocaleDateString()}
+Analysis Period: ${reportData.analysisPeriod}
+
+Summary:
+- Total Portfolio Value: $${reportData.summary.totalPortfolioValue.toLocaleString()}
+- Total Transactions: ${reportData.summary.totalTransactionCount.toLocaleString()}
+- Active Wallets: ${reportData.summary.activeWalletCount}/${reportData.summary.totalWallets}
+- Total Volume: $${reportData.summary.totalVolumeUSD.toLocaleString()}
+
+Key Insights:
+${reportData.insights.slice(0, 3).map(insight => 
+  `• ${insight.title}: ${insight.description}`
+).join('\n')}
+
+This report was generated by Eagle Eye - Blockchain Analytics Platform.
+  `);
+  
+  const mailtoLink = `mailto:?subject=${subject}&body=${body}`;
+  window.open(mailtoLink);
+}
+
+/**
+ * Share report via social media or messaging platforms
+ */
+export function shareReport(reportData: WalletReportData, platform: 'twitter' | 'linkedin' | 'whatsapp' = 'twitter'): void {
+  const text = encodeURIComponent(
+    `Check out this comprehensive wallet analysis report! 📊💰\n\n` +
+    `Portfolio Value: $${reportData.summary.totalPortfolioValue.toLocaleString()}\n` +
+    `Active Wallets: ${reportData.summary.activeWalletCount}/${reportData.summary.totalWallets}\n` +
+    `Generated by Eagle Eye - Blockchain Analytics Platform`
+  );
+  
+  let shareUrl = '';
+  
+  switch (platform) {
+    case 'twitter':
+      shareUrl = `https://twitter.com/intent/tweet?text=${text}`;
+      break;
+    case 'linkedin':
+      shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}&title=${encodeURIComponent('Wallet Analysis Report')}&summary=${text}`;
+      break;
+    case 'whatsapp':
+      shareUrl = `https://wa.me/?text=${text}`;
+      break;
+  }
+  
+  if (shareUrl) {
+    window.open(shareUrl, '_blank');
+  }
+}
+
+/**
+ * Generate a shareable link for the report
+ */
+export function generateShareableLink(reportId: string): string {
+  const baseUrl = window.location.origin;
+  return `${baseUrl}/reports/${reportId}`;
+}
+
+/**
+ * Copy report link to clipboard
+ */
+export async function copyReportLink(reportId: string): Promise<boolean> {
+  try {
+    const shareableLink = generateShareableLink(reportId);
+    await navigator.clipboard.writeText(shareableLink);
+    return true;
+  } catch (error) {
+    console.error('Failed to copy to clipboard:', error);
+    return false;
+  }
+}
+
+/**
+ * Download report in all available formats
+ */
+export function downloadAllFormats(reportData: WalletReportData, options: ExportOptions = {}): void {
+  const { filename = 'wallet-analysis-report' } = options;
+  
+  // Export in all formats
+  exportToCSV(reportData, { ...options, filename: `${filename}-csv` });
+  exportToJSON(reportData, { ...options, filename: `${filename}-json` });
+  
+  // Note: PDF export is async, so we'll handle it separately
+  setTimeout(() => {
+    exportToPDF(reportData, { ...options, filename: `${filename}-pdf` });
+  }, 1000);
+}

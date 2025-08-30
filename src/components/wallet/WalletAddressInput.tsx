@@ -85,12 +85,13 @@ export default function WalletAddressInput({
     
     if (text.trim()) {
       setIsValidating(true);
-      // Debounce validation
+      // Reduced debounce for faster feedback
       setTimeout(() => {
         const validated = parseAndValidateAddresses(text);
+
         setAddresses(validated);
         setIsValidating(false);
-      }, 300);
+      }, 100); // Reduced from 300ms to 100ms
     } else {
       setAddresses([]);
       setIsValidating(false);
@@ -112,13 +113,16 @@ export default function WalletAddressInput({
     setShowConfirmation(true);
   }, [addresses]);
 
-  // Handle final confirmation
+
+
+  // Handle final confirmation - now triggers for all valid addresses
   const handleFinalConfirmation = useCallback(() => {
-    const confirmedAddresses = addresses
-      .filter(addr => addr.isValid && addr.confirmed)
+    const validAddresses = addresses
+      .filter(addr => addr.isValid)
       .map(addr => addr.address);
     
-    onAddressesConfirmed(confirmedAddresses);
+
+    onAddressesConfirmed(validAddresses);
   }, [addresses, onAddressesConfirmed]);
 
   // Reset component
@@ -132,9 +136,10 @@ export default function WalletAddressInput({
   // Computed values
   const validAddresses = useMemo(() => addresses.filter(addr => addr.isValid), [addresses]);
   const confirmedAddresses = useMemo(() => addresses.filter(addr => addr.isValid && addr.confirmed), [addresses]);
-  const hasErrors = useMemo(() => addresses.some(addr => !addr.isValid), [addresses]);
-  const canConfirm = useMemo(() => validAddresses.length > 0 && !hasErrors, [validAddresses, hasErrors]);
-  const canAnalyze = useMemo(() => confirmedAddresses.length > 0, [confirmedAddresses]);
+  const invalidAddresses = useMemo(() => addresses.filter(addr => !addr.isValid), [addresses]);
+  const hasErrors = useMemo(() => invalidAddresses.length > 0, [invalidAddresses]);
+  const canConfirm = useMemo(() => validAddresses.length > 0, [validAddresses]);
+  const canAnalyze = useMemo(() => validAddresses.length > 0, [validAddresses]);
 
   // Character and address count
   const characterCount = inputText.length;
@@ -292,11 +297,13 @@ export default function WalletAddressInput({
           )}
         </div>
         
+
+
         {canAnalyze && (
           <div className="flex items-center space-x-4">
             <div className="text-right">
               <div className="text-xs text-slate-500">Ready for analysis</div>
-              <div className="text-sm font-medium text-slate-700">{confirmedAddresses.length} addresses</div>
+              <div className="text-sm font-medium text-slate-700">{validAddresses.length} valid address{validAddresses.length !== 1 ? 'es' : ''}</div>
             </div>
             
             <button
