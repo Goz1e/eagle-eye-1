@@ -20,12 +20,7 @@ if ! command -v vercel &> /dev/null; then
     npm install -g vercel
 fi
 
-# Check if Prisma is properly configured
-echo "🔍 Checking Prisma configuration..."
-if [ ! -f "prisma/schema.prisma" ]; then
-    echo "❌ Error: Prisma schema not found."
-    exit 1
-fi
+# Prisma configuration check removed - no database required
 
 # Check for required environment variables
 echo "🔍 Checking environment variables..."
@@ -58,9 +53,7 @@ echo "✅ Environment variables found:"
 echo "   DATABASE_URL: ${DATABASE_URL:0:50}..."
 echo "   DIRECT_URL: ${DIRECT_URL:0:50}..."
 
-# Generate Prisma client
-echo "⚙️  Generating Prisma client..."
-npx prisma generate
+# No Prisma client generation needed
 
 # Check if build works locally
 echo "🏗️  Testing build locally..."

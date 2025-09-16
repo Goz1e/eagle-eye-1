@@ -53,7 +53,6 @@ export default function HomePage() {
             <WalletAddressInput
               onAddressesConfirmed={handleAddressConfirm}
               maxAddresses={1}
-              enableBatchAnalysis={false}
               placeholder="Paste a single Aptos wallet address here..."
               className="w-full"
               hideConfirmButton={true}

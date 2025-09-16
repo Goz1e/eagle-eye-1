@@ -29,7 +29,7 @@ Eagle Eye is a Next.js application that provides comprehensive analytics for Apt
 
 - **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS
 - **Backend**: Next.js API routes, serverless functions
-- **Database**: PostgreSQL with Prisma ORM
+- **Storage**: File-based data storage
 - **Blockchain Integration**: Aptos Indexer API, Aptos Fullnode REST API
 - **Caching**: Redis (production) / In-memory (development)
 - **Deployment**: Vercel
@@ -133,9 +133,7 @@ cd eagle-eye
 # Install dependencies
 npm install
 
-# Setup database
-npx prisma migrate dev
-npx prisma generate
+# No database setup required - using file-based storage
 
 # Start development server
 npm run dev
@@ -222,11 +220,9 @@ src/
 │   ├── simple-batch.ts # Batch processing system
 │   ├── cache.ts        # Caching layer
 │   ├── normalization.ts # Data transformation utilities
-│   ├── db.ts           # Database configuration
 │   └── api-utils.ts    # Shared API utilities
 ├── types/              # TypeScript type definitions
-├── hooks/              # Custom React hooks
-└── prisma/             # Database schema and migrations
+└── hooks/              # Custom React hooks
 ```
 
 ### Core Files
@@ -236,7 +232,6 @@ src/
 - `src/lib/simple-batch.ts` - SimpleBatchProcessor for concurrent wallet processing
 - `src/lib/cache.ts` - SmartCache with Redis and in-memory support
 - `src/lib/normalization.ts` - Data transformation and microunit conversion
-- `src/lib/db.ts` - Prisma client configuration with connection pooling
 
 ### Testing
 
