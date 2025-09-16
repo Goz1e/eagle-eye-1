@@ -52,18 +52,21 @@ Eagle Eye is a Next.js application that provides comprehensive analytics for Apt
 ## Key Metrics Calculated
 
 ### Financial Metrics
+
 - Total deposit and withdrawal volumes (native units and USD)
 - Net flow calculations (deposits - withdrawals)
 - Rebate calculations (0.01% of total volume)
 - Fee savings vs Ethereum (approximately 22,000x cheaper)
 
 ### Transaction Analytics
+
 - Transaction counts (user vs system transactions)
 - Average transaction size and frequency
 - Gas usage and efficiency metrics
 - Transaction success/failure rates
 
 ### Trading Statistics
+
 - Trade frequency and volume distribution
 - Largest and smallest transactions
 - Time-based activity patterns
@@ -71,17 +74,20 @@ Eagle Eye is a Next.js application that provides comprehensive analytics for Apt
 ## API Endpoints
 
 ### Core Analysis
+
 - `POST /api/wallet/events` - Retrieve deposit/withdraw events for wallets
 - `POST /api/wallet/transactions` - Get transaction counts and gas metrics
 - `POST /api/wallet/balance` - Current and historical balance snapshots
 - `POST /api/wallet/batch` - Process multiple wallets simultaneously
 
 ### Test & Development
+
 - `POST /api/test/wallet-analysis` - Test single wallet analysis functionality
 - `POST /api/test/batch-analysis` - Test batch processing with multiple wallets
 - `GET /test` - Interactive test page for validating core functionality
 
 ### Utilities
+
 - `GET /api/prices` - Current token prices with caching
 - `POST /api/reports` - Save and retrieve generated reports
 - `GET /api/health` - System health and performance metrics
@@ -89,12 +95,14 @@ Eagle Eye is a Next.js application that provides comprehensive analytics for Apt
 ## Setup & Installation
 
 ### Prerequisites
+
 - Node.js 18.17+ or 20+
-- pnpm 8+
+- npm 8+
 - PostgreSQL database
 - Redis (for production)
 
 ### Environment Variables
+
 ```env
 # Database
 DATABASE_URL=postgresql://user:password@localhost:5432/eagle_eye
@@ -116,43 +124,48 @@ REDIS_URL=redis://localhost:6379
 ```
 
 ### Installation Steps
+
 ```bash
 # Clone the repository
 git clone [repository-url]
 cd eagle-eye
 
 # Install dependencies
-pnpm install
+npm install
 
 # Setup database
 npx prisma migrate dev
 npx prisma generate
 
 # Start development server
-pnpm dev
+npm run dev
 ```
 
 ## Usage
 
 ### Single Wallet Analysis
+
 1. Enter wallet address and select token type
 2. Choose date range for analysis
 3. Generate report with comprehensive metrics
 4. Export results as CSV or JSON
 
 ### Batch Processing
+
 1. Import multiple wallet addresses (manual entry or CSV)
 2. Configure analysis parameters
 3. Monitor real-time progress
 4. Review aggregated results across all wallets
 
 ### Report Management
+
 - Save frequently used configurations
 - Access historical reports
 - Share reports via email or Slack
 - Schedule recurring analysis
 
 ### Testing Functionality
+
 1. Navigate to `/test` page for interactive testing
 2. Use sample wallet addresses for quick validation
 3. Test both single and batch analysis workflows
@@ -191,6 +204,7 @@ pnpm dev
 ## Development
 
 ### Project Structure
+
 ```
 src/
 ├── app/                 # Next.js app router pages and API routes
@@ -216,6 +230,7 @@ src/
 ```
 
 ### Core Files
+
 - `src/lib/aggregator.ts` - Wallet analysis engine with WalletAnalyzer class
 - `src/lib/aptos-client.ts` - ResilientAptosClient with rate limiting and retry logic
 - `src/lib/simple-batch.ts` - SimpleBatchProcessor for concurrent wallet processing
@@ -224,27 +239,29 @@ src/
 - `src/lib/db.ts` - Prisma client configuration with connection pooling
 
 ### Testing
+
 ```bash
 # Test the Aptos client
-pnpm tsx scripts/test-aptos-client.ts
+npx tsx scripts/test-aptos-client.ts
 
 # Test the data aggregation system
-pnpm tsx scripts/test-aggregator.ts
+npx tsx scripts/test-aggregator.ts
 
 # Run examples
-pnpm tsx src/lib/aggregator-examples.ts
+npx tsx src/lib/aggregator-examples.ts
 
 # Build and check for errors
-pnpm build
+npm run build
 
 # Start development server
-pnpm dev
+npm run dev
 ```
 
 ### Build & Deploy
+
 ```bash
 # Build for production
-pnpm build
+npm run build
 
 # Deploy to Vercel
 vercel --prod
@@ -253,6 +270,7 @@ vercel --prod
 ## Roadmap
 
 ### Phase 1 (Current)
+
 - ✅ Core wallet analysis functionality
 - ✅ Batch processing system
 - ✅ Basic UI and reporting
@@ -260,12 +278,14 @@ vercel --prod
 - ✅ Comprehensive API endpoints
 
 ### Phase 2 (Next)
+
 - Multi-chain support (Ethereum, Solana)
 - Advanced analytics and trend analysis
 - Real-time monitoring and alerts
 - Enhanced UI with interactive charts
 
 ### Phase 3 (Future)
+
 - Machine learning for pattern detection
 - Automated compliance reporting
 - API for external integrations
@@ -274,6 +294,7 @@ vercel --prod
 ## Support
 
 For internal Canza Finance teams:
+
 - Technical issues: Contact development team
 - Feature requests: Submit via internal ticketing system
 - Training: Schedule onboarding sessions with operations team

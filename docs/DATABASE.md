@@ -41,10 +41,11 @@ GRANT ALL PRIVILEGES ON DATABASE eagle_eye TO eagle_eye_user;
 Run the automated database setup script:
 
 ```bash
-pnpm db:setup
+npm run db:setup
 ```
 
 This script will:
+
 - Generate the Prisma client
 - Push the schema to the database
 - Seed initial data (tokens, test wallets, etc.)
@@ -54,19 +55,19 @@ This script will:
 ### 1. Generate Prisma Client
 
 ```bash
-pnpm prisma:generate
+npm run prisma:generate
 ```
 
 ### 2. Push Schema to Database
 
 ```bash
-pnpm prisma:push
+npm run prisma:push
 ```
 
 ### 3. Seed Initial Data
 
 ```bash
-pnpm prisma:seed
+npm run prisma:seed
 ```
 
 ## 📊 Database Schema Overview
@@ -121,19 +122,23 @@ eagle_eye/
 The database comes pre-populated with:
 
 ### Test Users
+
 - **Admin User**: `admin@eagle-eye.com` (ADMIN role)
 - **Test User**: `test@eagle-eye.com` (USER role)
 
 ### Test Wallets
+
 - Sample Aptos wallet addresses for development
 - Pre-configured with test transactions
 
 ### Common Tokens
+
 - **APT**: Aptos Coin
 - **USDT**: Tether USD
 - **USDC**: USD Coin
 
 ### Sample Reports
+
 - Test wallet analysis reports
 - Various report formats and configurations
 
@@ -143,32 +148,32 @@ The database comes pre-populated with:
 
 ```bash
 # Generate Prisma client
-pnpm prisma:generate
+npm run prisma:generate
 
 # Push schema changes
-pnpm prisma:push
+npm run prisma:push
 
 # Open Prisma Studio
-pnpm prisma:studio
+npm run prisma:studio
 
 # Run migrations
-pnpm prisma:migrate
+npm run prisma:migrate
 
 # Seed database
-pnpm prisma:seed
+npm run prisma:seed
 
 # Reset database (development only)
-pnpm db:reset
+npm run db:reset
 ```
 
 ### Database Setup
 
 ```bash
 # Complete database setup
-pnpm db:setup
+npm run db:setup
 
 # Check database connection
-pnpm db:health
+npm run db:health
 ```
 
 ## 🔒 Security Considerations
@@ -203,7 +208,7 @@ pnpm db:health
 ### Health Checks
 
 ```typescript
-import { checkDatabaseConnection, getConnectionStatus } from '@/lib/db';
+import { checkDatabaseConnection, getConnectionStatus } from "@/lib/db";
 
 // Check connection health
 const isHealthy = await checkDatabaseConnection();
@@ -217,11 +222,13 @@ const status = await getConnectionStatus();
 ### Common Issues
 
 1. **Connection Refused**
+
    - Verify PostgreSQL is running
    - Check connection string format
    - Ensure database exists
 
 2. **Permission Denied**
+
    - Verify user permissions
    - Check database ownership
    - Ensure proper grants
@@ -240,7 +247,7 @@ Enable detailed logging in development:
 export DEBUG=prisma:*
 
 # Run with verbose output
-pnpm prisma:push --verbose
+npm run prisma:push --verbose
 ```
 
 ## 📚 Additional Resources
