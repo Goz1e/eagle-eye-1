@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useState } from "react";
 
 interface DateRangePickerProps {
   startDate: Date;
@@ -9,20 +9,28 @@ interface DateRangePickerProps {
 }
 
 const PRESET_RANGES = [
-  { label: 'Last 7 days', days: 7 },
-  { label: 'Last 30 days', days: 30 },
-  { label: 'Last 90 days', days: 90 },
-  { label: 'Last 6 months', days: 180 },
-  { label: 'Last year', days: 365 },
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "Last 90 days", days: 90 },
+  { label: "Last 6 months", days: 180 },
+  { label: "Last year", days: 365 },
 ];
 
-export function DateRangePicker({ startDate, endDate, onChange }: DateRangePickerProps) {
+export function DateRangePicker({
+  startDate,
+  endDate,
+  onChange,
+}: DateRangePickerProps) {
   const [isCustom, setIsCustom] = useState(false);
 
   const handlePresetChange = (days: number) => {
+    console.log(`handlePresetChange called with ${days} days`);
     const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - days);
+    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+    console.log(`DateRangePicker: Setting ${days} days range:`, {
+      start: start.toISOString(),
+      end: end.toISOString(),
+    });
     onChange(start, end);
     setIsCustom(false);
   };
@@ -42,7 +50,7 @@ export function DateRangePicker({ startDate, endDate, onChange }: DateRangePicke
   };
 
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    return date.toISOString().split("T")[0];
   };
 
   return (
@@ -50,34 +58,39 @@ export function DateRangePicker({ startDate, endDate, onChange }: DateRangePicke
       <h3 className="text-lg font-medium text-gray-900 dark:text-white">
         📅 Date Range
       </h3>
-      
+
       {/* Preset Buttons */}
       <div className="flex flex-wrap gap-2">
         {PRESET_RANGES.map((preset) => {
-          const isActive = !isCustom && 
-            Math.abs((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24) - preset.days) < 1;
-          
+          const isActive =
+            !isCustom &&
+            Math.abs(
+              (endDate.getTime() - startDate.getTime()) /
+                (1000 * 60 * 60 * 24) -
+                preset.days
+            ) < 1;
+
           return (
             <button
               key={preset.days}
               onClick={() => handlePresetChange(preset.days)}
-              className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+              className={`px-3 py-2 text-xs font-medium rounded-2xl transition-colors ${
                 isActive
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
               }`}
             >
               {preset.label}
             </button>
           );
         })}
-        
+
         <button
           onClick={() => setIsCustom(true)}
-          className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+          className={`px-3 py-2 text-xs font-medium rounded-2xl transition-colors ${
             isCustom
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
           }`}
         >
           Custom Range
@@ -86,31 +99,35 @@ export function DateRangePicker({ startDate, endDate, onChange }: DateRangePicke
 
       {/* Custom Date Inputs */}
       {isCustom && (
-        <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-2xl">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Start Date
             </label>
             <input
+              title="Start Date"
+              placeholder="Start Date"
               type="date"
               value={formatDate(startDate)}
               onChange={(e) => handleCustomStartChange(e.target.value)}
               max={formatDate(endDate)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               End Date
             </label>
             <input
+              title="End Date"
+              placeholder="End Date"
               type="date"
               value={formatDate(endDate)}
               onChange={(e) => handleCustomEndChange(e.target.value)}
               min={formatDate(startDate)}
               max={formatDate(new Date())}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-white"
             />
           </div>
         </div>
@@ -118,10 +135,14 @@ export function DateRangePicker({ startDate, endDate, onChange }: DateRangePicke
 
       {/* Selected Range Display */}
       <div className="text-sm text-gray-600 dark:text-gray-400">
-        <span className="font-medium">Selected Range:</span>{' '}
+        <span className="font-medium">Selected Range:</span>{" "}
         {startDate.toLocaleDateString()} - {endDate.toLocaleDateString()}
         <span className="ml-2 text-gray-500">
-          ({Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))} days)
+          (
+          {Math.ceil(
+            (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+          )}{" "}
+          days)
         </span>
       </div>
     </div>

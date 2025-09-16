@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState, useCallback } from 'react';
-import { DateRangePicker } from '../ui/DateRangePicker';
-import { TokenSelector } from '../ui/TokenSelector';
-import { AnalysisOptions } from '../ui/AnalysisOptions';
+import { useState, useCallback } from "react";
+import { DateRangePicker } from "../ui/DateRangePicker";
+import { TokenSelector } from "../ui/TokenSelector";
+import { AnalysisOptions } from "../ui/AnalysisOptions";
 
 interface ProgressiveConfigProps {
   isOpen: boolean;
@@ -14,18 +14,18 @@ interface ProgressiveConfigProps {
 
 export interface AdvancedConfig {
   timeRange: {
-    type: 'preset' | 'custom';
-    preset?: '7d' | '30d' | '90d' | '1y';
+    type: "preset" | "custom";
+    preset?: "7d" | "30d" | "90d" | "1y";
     custom?: { start: Date; end: Date };
   };
   analysisDepth: {
-    type: 'quick' | 'detailed' | 'comprehensive';
+    type: "quick" | "detailed" | "comprehensive";
     includeGasMetrics: boolean;
     includeTradingStats: boolean;
     includeUSDConversions: boolean;
   };
   tokenSelection: {
-    type: 'all' | 'apt-only' | 'stablecoins' | 'custom';
+    type: "all" | "apt-only" | "stablecoins" | "custom";
     customTokens?: string[];
   };
   performance: {
@@ -35,25 +35,25 @@ export interface AdvancedConfig {
   };
 }
 
-export function ProgressiveConfig({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  initialConfig 
+export function ProgressiveConfig({
+  isOpen,
+  onClose,
+  onSave,
+  initialConfig,
 }: ProgressiveConfigProps) {
   const [config, setConfig] = useState<AdvancedConfig>({
     timeRange: {
-      type: 'preset',
-      preset: '30d',
+      type: "preset",
+      preset: "30d",
     },
     analysisDepth: {
-      type: 'detailed',
+      type: "detailed",
       includeGasMetrics: true,
       includeTradingStats: true,
       includeUSDConversions: true,
     },
     tokenSelection: {
-      type: 'all',
+      type: "all",
     },
     performance: {
       enableCaching: true,
@@ -63,7 +63,9 @@ export function ProgressiveConfig({
     ...initialConfig,
   });
 
-  const [activeTab, setActiveTab] = useState<'basic' | 'advanced' | 'performance'>('basic');
+  const [activeTab, setActiveTab] = useState<
+    "basic" | "advanced" | "performance"
+  >("basic");
 
   const handleSave = useCallback(() => {
     onSave(config);
@@ -86,37 +88,48 @@ export function ProgressiveConfig({
             </p>
           </div>
           <button
+            title="Close"
             onClick={onClose}
             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
 
         {/* Tab Navigation */}
         <div className="flex border-b border-gray-200 dark:border-gray-700">
-          {(['basic', 'advanced', 'performance'] as const).map((tab) => (
+          {(["basic", "advanced", "performance"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab
-                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                  : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
               }`}
             >
-              {tab === 'basic' && '📊 Basic Settings'}
-              {tab === 'advanced' && '⚙️ Advanced Options'}
-              {tab === 'performance' && '🚀 Performance'}
+              {tab === "basic" && "📊 Basic Settings"}
+              {tab === "advanced" && "⚙️ Advanced Options"}
+              {tab === "performance" && "🚀 Performance"}
             </button>
           ))}
         </div>
 
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[60vh]">
-          {activeTab === 'basic' && (
+          {activeTab === "basic" && (
             <div className="space-y-6">
               {/* Time Range Configuration */}
               <div>
@@ -125,51 +138,71 @@ export function ProgressiveConfig({
                 </h3>
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-3">
-                    {(['7d', '30d', '90d', '1y'] as const).map((preset) => (
+                    {(["7d", "30d", "90d", "1y"] as const).map((preset) => (
                       <button
                         key={preset}
-                        onClick={() => setConfig(prev => ({
-                          ...prev,
-                          timeRange: { type: 'preset', preset }
-                        }))}
+                        onClick={() =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            timeRange: { type: "preset", preset },
+                          }))
+                        }
                         className={`px-4 py-2 rounded-lg border transition-colors ${
-                          config.timeRange.type === 'preset' && config.timeRange.preset === preset
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500'
+                          config.timeRange.type === "preset" &&
+                          config.timeRange.preset === preset
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500"
                         }`}
                       >
-                        {preset === '7d' ? '7 Days' : preset === '30d' ? '30 Days' : preset === '90d' ? '90 Days' : '1 Year'}
+                        {preset === "7d"
+                          ? "7 Days"
+                          : preset === "30d"
+                          ? "30 Days"
+                          : preset === "90d"
+                          ? "90 Days"
+                          : "1 Year"}
                       </button>
                     ))}
                   </div>
-                  
+
                   <div className="flex items-center space-x-3">
                     <input
+                      title="Custom Time"
                       type="checkbox"
                       id="custom-time"
-                      checked={config.timeRange.type === 'custom'}
-                      onChange={(e) => setConfig(prev => ({
-                        ...prev,
-                        timeRange: { 
-                          type: e.target.checked ? 'custom' : 'preset',
-                          preset: e.target.checked ? undefined : '30d'
-                        }
-                      }))}
+                      checked={config.timeRange.type === "custom"}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          timeRange: {
+                            type: e.target.checked ? "custom" : "preset",
+                            preset: e.target.checked ? undefined : "30d",
+                          },
+                        }))
+                      }
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                     />
-                    <label htmlFor="custom-time" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label
+                      htmlFor="custom-time"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
                       Custom date range
                     </label>
                   </div>
-                  
-                  {config.timeRange.type === 'custom' && (
+
+                  {config.timeRange.type === "custom" && (
                     <DateRangePicker
-                      startDate={config.timeRange.custom?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)}
+                      startDate={
+                        config.timeRange.custom?.start ||
+                        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+                      }
                       endDate={config.timeRange.custom?.end || new Date()}
-                      onChange={(start, end) => setConfig(prev => ({
-                        ...prev,
-                        timeRange: { type: 'custom', custom: { start, end } }
-                      }))}
+                      onChange={(start, end) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          timeRange: { type: "custom", custom: { start, end } },
+                        }))
+                      }
                     />
                   )}
                 </div>
@@ -182,49 +215,70 @@ export function ProgressiveConfig({
                 </h3>
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-3">
-                    {(['quick', 'detailed', 'comprehensive'] as const).map((depth) => (
-                      <button
-                        key={depth}
-                        onClick={() => setConfig(prev => ({
-                          ...prev,
-                          analysisDepth: { ...prev.analysisDepth, type: depth }
-                        }))}
-                        className={`px-4 py-2 rounded-lg border transition-colors ${
-                          config.analysisDepth.type === depth
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500'
-                        }`}
-                      >
-                        {depth.charAt(0).toUpperCase() + depth.slice(1)}
-                      </button>
-                    ))}
+                    {(["quick", "detailed", "comprehensive"] as const).map(
+                      (depth) => (
+                        <button
+                          key={depth}
+                          onClick={() =>
+                            setConfig((prev) => ({
+                              ...prev,
+                              analysisDepth: {
+                                ...prev.analysisDepth,
+                                type: depth,
+                              },
+                            }))
+                          }
+                          className={`px-4 py-2 rounded-lg border transition-colors ${
+                            config.analysisDepth.type === depth
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500"
+                          }`}
+                        >
+                          {depth.charAt(0).toUpperCase() + depth.slice(1)}
+                        </button>
+                      )
+                    )}
                   </div>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label className="flex items-center space-x-3">
                       <input
                         type="checkbox"
                         checked={config.analysisDepth.includeGasMetrics}
-                        onChange={(e) => setConfig(prev => ({
-                          ...prev,
-                          analysisDepth: { ...prev.analysisDepth, includeGasMetrics: e.target.checked }
-                        }))}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            analysisDepth: {
+                              ...prev.analysisDepth,
+                              includeGasMetrics: e.target.checked,
+                            },
+                          }))
+                        }
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                       />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">Include gas metrics</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Include gas metrics
+                      </span>
                     </label>
-                    
+
                     <label className="flex items-center space-x-3">
                       <input
                         type="checkbox"
                         checked={config.analysisDepth.includeTradingStats}
-                        onChange={(e) => setConfig(prev => ({
-                          ...prev,
-                          analysisDepth: { ...prev.analysisDepth, includeTradingStats: e.target.checked }
-                        }))}
+                        onChange={(e) =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            analysisDepth: {
+                              ...prev.analysisDepth,
+                              includeTradingStats: e.target.checked,
+                            },
+                          }))
+                        }
                         className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                       />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">Include trading statistics</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Include trading statistics
+                      </span>
                     </label>
                   </div>
                 </div>
@@ -237,25 +291,29 @@ export function ProgressiveConfig({
                 </h3>
                 <TokenSelector
                   selectedTokens={config.tokenSelection.customTokens || []}
-                  onChange={(tokens) => setConfig(prev => ({
-                    ...prev,
-                    tokenSelection: { type: 'custom', customTokens: tokens }
-                  }))}
+                  onChange={(tokens) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      tokenSelection: { type: "custom", customTokens: tokens },
+                    }))
+                  }
                 />
               </div>
             </div>
           )}
 
-          {activeTab === 'advanced' && (
+          {activeTab === "advanced" && (
             <div className="space-y-6">
               <AnalysisOptions
                 options={config.analysisDepth}
-                onChange={(options) => setConfig(prev => ({
-                  ...prev,
-                  analysisDepth: { ...prev.analysisDepth, ...options }
-                }))}
+                onChange={(options) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    analysisDepth: { ...prev.analysisDepth, ...options },
+                  }))
+                }
               />
-              
+
               {/* Additional Advanced Features */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -266,10 +324,15 @@ export function ProgressiveConfig({
                     <input
                       type="checkbox"
                       checked={config.analysisDepth.includeUSDConversions}
-                      onChange={(e) => setConfig(prev => ({
-                        ...prev,
-                        analysisDepth: { ...prev.analysisDepth, includeUSDConversions: e.target.checked }
-                      }))}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          analysisDepth: {
+                            ...prev.analysisDepth,
+                            includeUSDConversions: e.target.checked,
+                          },
+                        }))
+                      }
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -281,7 +344,7 @@ export function ProgressiveConfig({
             </div>
           )}
 
-          {activeTab === 'performance' && (
+          {activeTab === "performance" && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -292,38 +355,58 @@ export function ProgressiveConfig({
                     <input
                       type="checkbox"
                       checked={config.performance.enableCaching}
-                      onChange={(e) => setConfig(prev => ({
-                        ...prev,
-                        performance: { ...prev.performance, enableCaching: e.target.checked }
-                      }))}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          performance: {
+                            ...prev.performance,
+                            enableCaching: e.target.checked,
+                          },
+                        }))
+                      }
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Enable result caching</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Enable result caching
+                    </span>
                   </label>
-                  
+
                   <label className="flex items-center space-x-3">
                     <input
                       type="checkbox"
                       checked={config.performance.parallelProcessing}
-                      onChange={(e) => setConfig(prev => ({
-                        ...prev,
-                        performance: { ...prev.performance, parallelProcessing: e.target.checked }
-                      }))}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          performance: {
+                            ...prev.performance,
+                            parallelProcessing: e.target.checked,
+                          },
+                        }))
+                      }
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Enable parallel processing</span>
+                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                      Enable parallel processing
+                    </span>
                   </label>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Max Concurrent Requests
                     </label>
                     <select
+                      title="Max Concurrent Requests"
                       value={config.performance.maxConcurrentRequests}
-                      onChange={(e) => setConfig(prev => ({
-                        ...prev,
-                        performance: { ...prev.performance, maxConcurrentRequests: Number(e.target.value) }
-                      }))}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          performance: {
+                            ...prev.performance,
+                            maxConcurrentRequests: Number(e.target.value),
+                          },
+                        }))
+                      }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value={3}>3 (Conservative)</option>
