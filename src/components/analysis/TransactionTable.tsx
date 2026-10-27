@@ -21,7 +21,7 @@ function formatAmount(amountStr: string, decimals: number = 6): string {
       maximumFractionDigits: 2,
     }
   );
-  return formattedAmount;
+  return formattedAmount.replace(/,/g,"");
 }
 
 interface TransactionTableProps {
@@ -39,11 +39,11 @@ export function TransactionTable({
     <div>
       <div className="flex justify-between items-center mb-2">
         <h4 className="text-md font-semibold">
-          {title} ({transactions.length})
+          {title} ({transactions?.length})
         </h4>
         <button
           onClick={onDownload}
-          disabled={transactions.length === 0}
+          disabled={transactions?.length === 0}
           className="bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-1 rounded-lg text-sm disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           Download CSV
@@ -71,7 +71,7 @@ export function TransactionTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {transactions.length > 0 ? (
+            {transactions?.length > 0 ? (
               transactions.map((tx, index) => (
                 <tr key={index} className="hover:bg-gray-50">
                   <td className="px-4 py-2 whitespace-nowrap">

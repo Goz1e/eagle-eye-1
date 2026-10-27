@@ -316,8 +316,8 @@ export function TransactionExporter({
                   Scan Complete
                 </h3>
                 <p className="text-sm text-green-700 mt-1">
-                  Found {inboundTxs.length + outboundTxs.length} transactions (
-                  {inboundTxs.length} inbound, {outboundTxs.length} outbound)
+                  Found {inboundTxs?.length + outboundTxs?.length} transactions (
+                  {inboundTxs?.length} inbound, {outboundTxs?.length} outbound)
                 </p>
               </div>
             </div>
@@ -344,7 +344,7 @@ export function TransactionExporter({
                         : "bg-white text-gray-700 hover:bg-blue-50 border border-gray-300"
                     }`}
                   >
-                    All ({inboundTxs.length + outboundTxs.length})
+                    All ({inboundTxs?.length + outboundTxs?.length})
                   </button>
                   <button
                     onClick={() => setFilter("inbound")}
@@ -354,7 +354,7 @@ export function TransactionExporter({
                         : "bg-white text-gray-700 hover:bg-green-50 border border-gray-300"
                     }`}
                   >
-                    Inbound ({inboundTxs.length})
+                    Inbound ({inboundTxs?.length})
                   </button>
                   <button
                     onClick={() => setFilter("outbound")}
@@ -364,12 +364,12 @@ export function TransactionExporter({
                         : "bg-white text-gray-700 hover:bg-red-50 border border-gray-300"
                     }`}
                   >
-                    Outbound ({outboundTxs.length})
+                    Outbound ({outboundTxs?.length})
                   </button>
                 </div>
               </div>
 
-              {(inboundTxs.length > 0 || outboundTxs.length > 0) && (
+              {(inboundTxs?.length > 0 || outboundTxs?.length > 0) && (
                 <div className="flex justify-end lg:justify-start">
                   <button
                     onClick={handleDownloadAll}

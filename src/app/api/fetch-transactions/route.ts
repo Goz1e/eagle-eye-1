@@ -1,5 +1,5 @@
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,106 +8,63 @@ const INDEXER_URL =
   process.env.APTOS_INDEXER_URL ??
   "https://api.mainnet.aptoslabs.com/v1/graphql";
 
+const FULLNODE_URL =
+  process.env.APTOS_FULLNODE_URL ??
+  "https://api.mainnet.aptoslabs.com/v1";
+
+const ARCHIVE_URL =
+  process.env.APTOS_ARCHIVE_URL ??
+  "https://archive.mainnet.aptoslabs.com/v1";
+
 const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
+const HASH_BATCH_SIZE = 3;
+const HASH_RETRIES = 3;
+const HASH_BATCH_PAUSE_MS = 500;
 
-interface GraphQLError {
-  message: string;
+interface FungibleAssetActivity {
+  transaction_version: string | number;
+  event_index?: number;
+  owner_address: string;
+  asset_type: string;
+  amount: string | number;
+  type: string;
+  transaction_timestamp: string;
+  storage_id?: string;
+  entry_function_id_str?: string | null;
+  is_gas_fee?: boolean;
 }
 
-interface FungibleActivity {
-  amount: string | number | null;
-  asset_type: string;
-  event_index: string | number;
-  owner_address: string;
-  transaction_version: string | number;
-  transaction_timestamp: string;
-  type: string;
-  is_transaction_success: boolean | null;
-  entry_function_id_str: string | null;
+interface ActivityPage {
+  fungible_asset_activities: FungibleAssetActivity[];
+}
+
+interface ActivityRow {
+  transactionVersion: string;
+  transactionHash: string;
+  timestamp: string;
+  direction: "inbound" | "outbound";
+  walletAddress: string;
+  counterparty: string;
+  assetType: string;
+  amount: string;
+  activityType: string;
+  entryFunction: string | null;
 }
 
 interface GraphQLResponse<T> {
   data?: T;
-  errors?: GraphQLError[];
+  errors?: Array<{ message: string }>;
 }
 
-interface CsvData {
-  date: string;
-  version: string;
-  transactionHash: string;
-  amount: string;
-  from: string;
-  to: string;
-  tokenAddress: string;
-  eventType: string;
-}
-
-interface ActivityPage {
-  fungible_asset_activities: FungibleActivity[];
-}
-
-interface VersionPage {
-  fungible_asset_activities: FungibleActivity[];
-}
-
-function normalizeAddress(address: string): string {
-  const hex = address.replace(/^0x/i, "").toLowerCase();
-  return `0x${hex.replace(/^0+/, "") || "0"}`;
-}
-
-function isValidAddress(address: unknown): address is string {
-  return (
-    typeof address === "string" &&
-    /^0x[0-9a-fA-F]{1,64}$/.test(address)
-  );
-}
-
-async function queryIndexer<T>(
-  query: string,
-  variables: Record<string, unknown>
-): Promise<T> {
-  const response = await fetch(INDEXER_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query, variables }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Aptos Indexer HTTP ${response.status}: ${await response.text()}`
-    );
-  }
-
-  const result =
-    (await response.json()) as GraphQLResponse<T>;
-
-  if (result.errors?.length) {
-    throw new Error(
-      result.errors.map((error) => error.message).join("; ")
-    );
-  }
-
-  if (!result.data) {
-    throw new Error("Aptos Indexer returned no data");
-  }
-
-  return result.data;
-}
-
-const ACCOUNT_ACTIVITIES_QUERY = `
-  query AccountActivities(
-    $address: String!
+const WALLET_ACTIVITIES_QUERY = `
+  query WalletActivities(
+    $owner: String!
     $limit: Int!
     $offset: Int!
   ) {
     fungible_asset_activities(
-      where: {
-        owner_address: { _eq: $address }
-      }
+      where: { owner_address: { _eq: $owner } }
       order_by: [
         { transaction_version: desc }
         { event_index: desc }
@@ -115,391 +72,542 @@ const ACCOUNT_ACTIVITIES_QUERY = `
       limit: $limit
       offset: $offset
     ) {
-      amount
-      asset_type
+      transaction_version
       event_index
       owner_address
-      transaction_version
-      transaction_timestamp
+      asset_type
+      amount
       type
-      is_transaction_success
+      transaction_timestamp
+      storage_id
       entry_function_id_str
+      is_gas_fee
     }
   }
 `;
 
-const VERSION_ACTIVITIES_QUERY = `
-  query VersionActivities($versions: [bigint!]!) {
+const ACTIVITIES_BY_VERSION_QUERY = `
+  query ActivitiesByVersion($versions: [bigint!]!) {
     fungible_asset_activities(
-      where: {
-        transaction_version: { _in: $versions }
-      }
+      where: { transaction_version: { _in: $versions } }
       order_by: [
         { transaction_version: desc }
         { event_index: asc }
       ]
     ) {
-      amount
-      asset_type
+      transaction_version
       event_index
       owner_address
-      transaction_version
-      transaction_timestamp
+      asset_type
+      amount
       type
-      is_transaction_success
+      transaction_timestamp
+      storage_id
       entry_function_id_str
+      is_gas_fee
     }
   }
 `;
 
-function eventDirection(
-  type: string
-): "deposit" | "withdraw" | null {
-  const normalized = type.toLowerCase();
+async function graphqlRequest<T>(
+  query: string,
+  variables: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(INDEXER_URL, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+  });
 
-  if (
-    normalized.includes("depositevent") ||
-    normalized.endsWith("::deposit")
-  ) {
-    return "deposit";
+  const body = (await response.json()) as GraphQLResponse<T>;
+
+  if (!response.ok) {
+    throw new Error(
+      `Aptos Indexer HTTP ${response.status}: ${JSON.stringify(body)}`,
+    );
   }
 
-  if (
-    normalized.includes("withdrawevent") ||
-    normalized.endsWith("::withdraw")
+  if (body.errors?.length) {
+    throw new Error(
+      `Aptos Indexer GraphQL error: ${body.errors
+        .map((error) => error.message)
+        .join("; ")}`,
+    );
+  }
+
+  if (!body.data) {
+    throw new Error("Aptos Indexer returned no data.");
+  }
+
+  return body.data;
+}
+
+function normalizeAddress(address: string): string {
+  return address.trim().toLowerCase();
+}
+
+function normalizeVersion(version: string | number): string {
+  return String(version);
+}
+
+/**
+ * Keep amounts as strings. Converting large on-chain integer amounts to
+ * JavaScript numbers can lose precision.
+ */
+export function normalizeAmount(amount: string | number): string {
+  const value = String(amount).trim().replace(/,/g, "");
+
+  if (!/^-?\d+$/.test(value)) {
+    throw new Error(`Invalid raw token amount returned by Indexer: ${value}`);
+  }
+
+  return value;
+}
+
+function isWithdraw(activity: FungibleAssetActivity): boolean {
+  return activity.type.toLowerCase().includes("withdraw");
+}
+
+function isDeposit(activity: FungibleAssetActivity): boolean {
+  return activity.type.toLowerCase().includes("deposit");
+}
+
+async function fetchWalletActivities(
+  walletAddress: string,
+): Promise<FungibleAssetActivity[]> {
+  const activities: FungibleAssetActivity[] = [];
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await graphqlRequest<ActivityPage>(
+      WALLET_ACTIVITIES_QUERY,
+      {
+        owner: walletAddress,
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      },
+    );
+
+    const rows = data.fungible_asset_activities ?? [];
+    activities.push(...rows);
+
+    if (rows.length < PAGE_SIZE) {
+      return activities;
+    }
+  }
+
+  throw new Error(
+    `Reached the pagination limit of ${MAX_PAGES} pages. Narrow the date range or increase MAX_PAGES.`,
+  );
+}
+
+async function fetchActivitiesForVersions(
+  versions: string[],
+): Promise<FungibleAssetActivity[]> {
+  if (versions.length === 0) {
+    return [];
+  }
+
+  const data = await graphqlRequest<ActivityPage>(
+    ACTIVITIES_BY_VERSION_QUERY,
+    { versions },
+  );
+
+  return data.fungible_asset_activities ?? [];
+}
+const APTOS_KEY = process.env.APTOS_KEY ?? ""
+
+async function fetchHashFromEndpoint(
+  endpoint: string,
+  version: string,
+): Promise<string> {
+  const response = await fetch(
+    `${endpoint}/transactions/by_version/${encodeURIComponent(version)}`,
+    {
+      method: "GET",
+      cache: "no-store",
+      headers: APTOS_KEY? { Accept: "application/json", Authorization: `Bearer ${APTOS_KEY}` } :{ Accept: "application/json" },
+    },
+  );
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`HTTP ${response.status}: ${details}`);
+  }
+
+  const transaction = (await response.json()) as {
+    version?: string;
+    hash?: unknown;
+  };
+
+  if (typeof transaction.hash !== "string" || !transaction.hash) {
+    throw new Error(
+      `No transaction hash returned for version ${version}.`,
+    );
+  }
+
+  return transaction.hash;
+}
+
+async function fetchTransactionHash(version: string): Promise<string> {
+  try {
+    return await fetchHashFromEndpoint(FULLNODE_URL, version);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    // Older transactions may no longer be available on the standard fullnode.
+    if (
+      message.includes("HTTP 410") ||
+      message.includes("version_pruned")
+    ) {
+      return fetchHashFromEndpoint(ARCHIVE_URL, version);
+    }
+
+    throw error;
+  }
+}
+
+async function fetchTransactionHashes(
+  versions: string[],
+): Promise<Map<string, string>> {
+  const hashes = new Map<string, string>();
+  const failures: Array<{ version: string; error: string }> = [];
+
+  const uniqueVersions = [...new Set(versions)];
+
+  for (
+    let i = 0;
+    i < uniqueVersions.length;
+    i += HASH_BATCH_SIZE
   ) {
-    return "withdraw";
+    const batch = uniqueVersions.slice(i, i + HASH_BATCH_SIZE);
+
+    const results = await Promise.allSettled(
+      batch.map(async (version) => {
+        let lastError: unknown;
+
+        for (let attempt = 1; attempt <= HASH_RETRIES; attempt++) {
+          try {
+            const hash = await fetchTransactionHash(version);
+            return { version, hash };
+          } catch (error) {
+            lastError = error;
+
+            // Back off before retrying
+            if (attempt < HASH_RETRIES) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, 300 * attempt),
+              );
+            }
+          }
+        }
+
+        throw lastError instanceof Error
+          ? lastError
+          : new Error(String(lastError));
+      }),
+    );
+
+    results.forEach((result, index) => {
+      const version = batch[index];
+
+      if (result.status === "fulfilled") {
+        hashes.set(result.value.version, result.value.hash);
+      } else {
+        const message =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+
+        failures.push({ version, error: message });
+
+        console.error(
+          `Hash lookup failed for version ${version}:`,
+          message,
+        );
+      }
+    });
+
+    // Pause between batches to respect rate limits
+    if (i + HASH_BATCH_SIZE < uniqueVersions.length) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, HASH_BATCH_PAUSE_MS),
+      );
+    }
+  }
+
+  // If some hashes could not be retrieved, we log the failures but continue.
+  if (failures.length > 0) {
+    console.error(
+      `Unable to retrieve ${failures.length} transaction hash(es): ` +
+        failures
+          .map(({ version, error }) => `${version}: ${error}`)
+          .join(" | "),
+    );
+  }
+
+  return hashes;
+}
+
+function pairActivities(
+  walletAddress: string,
+  walletActivities: FungibleAssetActivity[],
+  allActivities: FungibleAssetActivity[],
+  transactionHashes: Map<string, string>,
+): ActivityRow[] {
+  const normalizedWallet = normalizeAddress(walletAddress);
+
+  const allByVersion = new Map<string, FungibleAssetActivity[]>();
+
+  for (const activity of allActivities) {
+    const version = normalizeVersion(activity.transaction_version);
+    const group = allByVersion.get(version) ?? [];
+    group.push(activity);
+    allByVersion.set(version, group);
+  }
+
+  return walletActivities.map((own) => {
+    const version = normalizeVersion(own.transaction_version);
+    const ownAmount = normalizeAmount(own.amount);
+    const ownAsset = own.asset_type;
+    const ownIsWithdraw = isWithdraw(own);
+    const ownIsDeposit = isDeposit(own);
+
+    const sameTransaction = allByVersion.get(version) ?? [];
+
+    const candidates = sameTransaction.filter((candidate) => {
+      if (
+        normalizeAddress(candidate.owner_address) === normalizedWallet
+      ) {
+        return false;
+      }
+
+      if (candidate.asset_type !== ownAsset) {
+        return false;
+      }
+
+      if (normalizeAmount(candidate.amount) !== ownAmount) {
+        return false;
+      }
+
+      // Match a withdrawal to a deposit, or a deposit to a withdrawal.
+      if (ownIsWithdraw && isDeposit(candidate)) {
+        return true;
+      }
+
+      if (ownIsDeposit && isWithdraw(candidate)) {
+        return true;
+      }
+
+      return false;
+    });
+
+    const counterparty = candidates[0]?.owner_address ?? "";
+
+    const direction: "inbound" | "outbound" = ownIsDeposit
+      ? "inbound"
+      : "outbound";
+
+    return {
+      transactionVersion: version,
+      transactionHash: transactionHashes.get(version) ?? "",
+      timestamp: own.transaction_timestamp,
+      direction,
+      walletAddress: own.owner_address,
+      counterparty,
+      assetType: own.asset_type,
+      amount: normalizeAmount(ownAmount),
+      activityType: own.type,
+      entryFunction: own.entry_function_id_str ?? null,
+    };
+  });
+}
+
+function parseDate(value: unknown): Date | null {
+  if (typeof value !== "string" || value.trim() === "") {
+    return null;
+  }
+
+  // Try standard ISO format first
+  const iso = new Date(value);
+  if (!Number.isNaN(iso.getTime())) {
+    return iso;
+  }
+
+  // Try common DD/MM/YYYY (or D/M/YYYY) format
+  const parts = value.trim().split(/[/\-]/);
+  if (parts.length === 3) {
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    if (!Number.isNaN(day) && !Number.isNaN(month) && !Number.isNaN(year)) {
+      const d = new Date(year, month - 1, day);
+      if (!Number.isNaN(d.getTime())) {
+        return d;
+      }
+    }
   }
 
   return null;
 }
 
-function matchesToken(
-  activity: FungibleActivity,
-  tokenAddress?: string
-): boolean {
-  if (!tokenAddress) return true;
-
-  const filter = tokenAddress.toLowerCase();
-  const assetType = activity.asset_type.toLowerCase();
-
-  // Accept an exact asset type or a metadata address.
-  // A symbol such as "USDT" is not guaranteed to be an address.
-  return (
-    assetType === filter ||
-    normalizeAddress(assetType) === normalizeAddress(filter)
-  );
-}
-
-function pairActivities(
-  walletAddress: string,
-  activities: FungibleActivity[],
-  transactionHashes: Map<string, string>,
-  tokenAddress?: string
-): { inbound: CsvData[]; outbound: CsvData[] } {
-  const wallet = normalizeAddress(walletAddress);
-  const inbound: CsvData[] = [];
-  const outbound: CsvData[] = [];
-
-  const groups = new Map<string, FungibleActivity[]>();
-
-  for (const activity of activities) {
-    if (activity.is_transaction_success === false) continue;
-    if (activity.amount == null) continue;
-    if (!matchesToken(activity, tokenAddress)) continue;
-
-    const direction = eventDirection(activity.type);
-    if (!direction) continue;
-
-    const key = [
-      String(activity.transaction_version),
-      activity.asset_type.toLowerCase(),
-      String(activity.amount),
-    ].join(":");
-
-    const group = groups.get(key) ?? [];
-    group.push(activity);
-    groups.set(key, group);
-  }
-
-  for (const group of groups.values()) {
-    const walletActivities = group.filter(
-      (activity) =>
-        normalizeAddress(activity.owner_address) === wallet
-    );
-
-    const otherActivities = group.filter(
-      (activity) =>
-        normalizeAddress(activity.owner_address) !== wallet
-    );
-
-    for (const own of walletActivities) {
-      const direction = eventDirection(own.type);
-      if (!direction) continue;
-
-      // Match the opposite event to identify the counterparty.
-      const opposite = direction === "deposit" ? "withdraw" : "deposit";
-
-      const counterparty = otherActivities.find(
-        (candidate) =>
-          eventDirection(candidate.type) === opposite
-      );
-
-      const isInbound = direction === "deposit";
-
-      // Some transactions do not expose a pairable activity.
-      // Preserve the wallet activity rather than inventing an address.
-      const row: CsvData = {
-        date: new Date(own.transaction_timestamp).toISOString(),
-        version: String(own.transaction_version),
-        transactionHash:
-          transactionHashes.get(String(own.transaction_version)) ?? "",
-        amount: String(own.amount),
-        from: isInbound
-          ? counterparty?.owner_address ?? ""
-          : walletAddress,
-        to: isInbound
-          ? walletAddress
-          : counterparty?.owner_address ?? "",
-        tokenAddress: own.asset_type,
-        eventType: own.type,
-      };
-
-      if (isInbound) {
-        inbound.push(row);
-      } else {
-        outbound.push(row);
-      }
-    }
-  }
-
-  return { inbound, outbound };
-}
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const body: unknown = await request.json();
-
-    if (!body || typeof body !== "object") {
-      return NextResponse.json(
-        { error: "A JSON request body is required" },
-        { status: 400 }
-      );
-    }
-
-    const {
-      walletAddress,
-      startDate,
-      endDate,
-      tokenAddress,
-    } = body as {
+    const body = (await request.json()) as {
       walletAddress?: unknown;
       startDate?: unknown;
       endDate?: unknown;
       tokenAddress?: unknown;
     };
 
-    if (!isValidAddress(walletAddress)) {
+    const walletAddress =
+      typeof body.walletAddress === "string"
+        ? body.walletAddress.trim()
+        : "";
+
+    if (!walletAddress) {
       return NextResponse.json(
-        { error: "A valid Aptos wallet address is required" },
-        { status: 400 }
+        { error: "walletAddress is required." },
+        { status: 400 },
       );
     }
 
-    if (
-      tokenAddress !== undefined &&
-      (typeof tokenAddress !== "string" ||
-        !isValidAddress(tokenAddress))
-    ) {
+    const startDate = parseDate(body.startDate);
+    const endDate = parseDate(body.endDate);
+
+    if (body.startDate && !startDate) {
       return NextResponse.json(
-        {
-          error:
-            "tokenAddress must be an Aptos address. Use the asset metadata address or full coin type.",
-        },
-        { status: 400 }
+        { error: "startDate is invalid." },
+        { status: 400 },
       );
     }
 
-    const now = new Date();
-
-    const start = startDate
-      ? new Date(String(startDate))
-      : new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
-
-    const end = endDate
-      ? new Date(String(endDate))
-      : now;
-
-    if (
-      Number.isNaN(start.getTime()) ||
-      Number.isNaN(end.getTime()) ||
-      start > end
-    ) {
+    if (body.endDate && !endDate) {
       return NextResponse.json(
-        { error: "Invalid date range" },
-        { status: 400 }
+        { error: "endDate is invalid." },
+        { status: 400 },
       );
     }
 
-    const activities: FungibleActivity[] = [];
-    let offset = 0;
-    let reachedStart = false;
-
-    // Get the wallet's asset activities, newest first.
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const data = await queryIndexer<ActivityPage>(
-        ACCOUNT_ACTIVITIES_QUERY,
-        {
-          address: walletAddress,
-          limit: PAGE_SIZE,
-          offset,
-        }
+    if (startDate && endDate && startDate > endDate) {
+      return NextResponse.json(
+        { error: "startDate must be earlier than or equal to endDate." },
+        { status: 400 },
       );
-
-      const rows = data.fungible_asset_activities;
-
-      if (rows.length === 0) break;
-
-      for (const row of rows) {
-        const timestamp = new Date(row.transaction_timestamp);
-
-        if (Number.isNaN(timestamp.getTime())) continue;
-
-        // Results are newest-first, so older pages can be skipped.
-        if (timestamp < start) {
-          reachedStart = true;
-          continue;
-        }
-
-        if (timestamp <= end) {
-          activities.push(row);
-        }
-      }
-
-      offset += rows.length;
-
-      if (rows.length < PAGE_SIZE || reachedStart) break;
     }
 
-    // Fetch all activities for the relevant transaction versions.
-    // These allow us to match wallet deposits/withdrawals to
-    // counterparties in the same transaction.
+    const tokenAddress =
+      typeof body.tokenAddress === "string"
+        ? body.tokenAddress.trim().toLowerCase()
+        : "";
+
+    // If no dates are supplied, default to the last 60 days.
+    const effectiveEndDate = endDate ?? new Date();
+    const effectiveStartDate =
+      startDate ??
+      new Date(
+        effectiveEndDate.getTime() - 60 * 24 * 60 * 60 * 1000,
+      );
+
+    // Fetch activities, then narrow them to the requested period.
+    const fetchedActivities = await fetchWalletActivities(walletAddress);
+
+    const dateFilteredActivities = fetchedActivities.filter((activity) => {
+      const timestamp = new Date(activity.transaction_timestamp).getTime();
+
+      return (
+        Number.isFinite(timestamp) &&
+        timestamp >= effectiveStartDate.getTime() &&
+        timestamp <= effectiveEndDate.getTime()
+      );
+    });
+
+    const filteredActivities = tokenAddress
+      ? dateFilteredActivities.filter(
+          (activity) =>
+            activity.asset_type.toLowerCase() === tokenAddress,
+        )
+      : dateFilteredActivities;
+
     const versions = [
       ...new Set(
-        activities.map((activity) =>
-          String(activity.transaction_version)
-        )
+        filteredActivities.map((activity) =>
+          normalizeVersion(activity.transaction_version),
+        ),
       ),
     ];
 
-    const allActivities: FungibleActivity[] = [];
+    // Fetch all activities for those versions to identify counterparties.
+    const allActivities = await fetchActivitiesForVersions(versions);
 
-    for (let i = 0; i < versions.length; i += 50) {
-      const versionBatch = versions.slice(i, i + 50);
+    // A hash is required for every returned transaction version.
+    const transactionHashes = await fetchTransactionHashes(versions);
 
-      const data = await queryIndexer<VersionPage>(
-        VERSION_ACTIVITIES_QUERY,
-        { versions: versionBatch }
-      );
-
-      allActivities.push(...data.fungible_asset_activities);
-    }
-
-    // A transaction hash is not stored in fungible_asset_activities.
-    // Fetch transaction details through the v4 SDK for the versions.
-    // Hash lookup failures do not prevent CSV export.
-    const { Aptos, AptosConfig, Network } = await import(
-      "@aptos-labs/ts-sdk"
-    );
-
-    const aptos = new Aptos(
-      new AptosConfig({ network: Network.MAINNET })
-    );
-
-    const transactionHashes = new Map<string, string>();
-
-    const uniqueVersions = [
-      ...new Set(
-        allActivities.map((activity) =>
-          String(activity.transaction_version)
-        )
-      ),
-    ];
-
-    // Keep concurrent requests bounded.
-    for (let i = 0; i < uniqueVersions.length; i += 10) {
-      const versionBatch = uniqueVersions.slice(i, i + 10);
-
-      const results = await Promise.allSettled(
-        versionBatch.map(async (version) => {
-          const transaction = await aptos.getTransactionByVersion({
-            ledgerVersion: version as any,
-          });
-
-          return {
-            version,
-            hash:
-              "hash" in transaction &&
-              typeof transaction.hash === "string"
-                ? transaction.hash
-                : "",
-          };
-        })
-      );
-
-      for (const result of results) {
-        if (result.status === "fulfilled" && result.value.hash) {
-          transactionHashes.set(
-            result.value.version,
-            result.value.hash
-          );
-        }
-      }
-    }
-
-    const { inbound, outbound } = pairActivities(
+    const rows = pairActivities(
       walletAddress,
+      filteredActivities,
       allActivities,
       transactionHashes,
-      tokenAddress as string | undefined
     );
 
-    // Apply the date range to paired activities too.
-    const inRange = (row: CsvData) => {
-      const date = new Date(row.date);
-      return date >= start && date <= end;
-    };
+    // Transform ActivityRow[] into the CsvData format the frontend expects.
+    // The frontend destructures { inbound, outbound } where each entry has:
+    // { date, version, transactionHash, amount, from, to }
+    const toCsvData = (row: ActivityRow) => ({
+      date: row.timestamp,
+      version: row.transactionVersion,
+      transactionHash: row.transactionHash,
+      amount: normalizeAmount(row.amount),
+      from: row.direction === "outbound" ? row.walletAddress : row.counterparty,
+      to: row.direction === "outbound" ? row.counterparty : row.walletAddress,
+    });
 
-    const filteredInbound = inbound.filter(inRange);
-    const filteredOutbound = outbound.filter(inRange);
+    const inbound = rows
+      .filter((r) => r.direction === "inbound")
+      .map(toCsvData);
+
+    const outbound = rows
+      .filter((r) => r.direction === "outbound")
+      .map(toCsvData);
 
     return NextResponse.json({
-      inbound: filteredInbound,
-      outbound: filteredOutbound,
+      success: true,
+      walletAddress,
+      filters: {
+        startDate: effectiveStartDate.toISOString(),
+        endDate: effectiveEndDate.toISOString(),
+        tokenAddress: tokenAddress || null,
+      },
+      count: rows.length,
+      inboundCount: inbound.length,
+      outboundCount: outbound.length,
+      inbound,
+      outbound,
       debug: {
-        network: "mainnet",
-        walletAddress,
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
-        walletActivitiesFound: activities.length,
-        transactionVersionsFound: versions.length,
-        allActivitiesFetched: allActivities.length,
-        inboundCount: filteredInbound.length,
-        outboundCount: filteredOutbound.length,
-        truncated: offset >= PAGE_SIZE * MAX_PAGES,
+        fetchedActivities: fetchedActivities.length,
+        dateFilteredActivities: dateFilteredActivities.length,
+        filteredActivities: filteredActivities.length,
+        transactionVersions: versions.length,
+        activitiesForVersions: allActivities.length,
+        transactionHashesRetrieved: transactionHashes.size,
       },
     });
-  } catch (error: unknown) {
+  } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : "Unexpected error";
+      error instanceof Error ? error.message : String(error);
 
-    console.error("Aptos transaction export failed:", error);
+    console.error("Aptos activity export failed:", message);
 
     return NextResponse.json(
-      { error: message },
-      { status: 500 }
+      {
+        success: false,
+        error: message,
+      },
+      { status: 500 },
     );
   }
 }
